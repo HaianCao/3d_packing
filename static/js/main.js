@@ -41,9 +41,7 @@ class BinPackingVisualizer {
         document.getElementById('copyJsonExample').addEventListener('click', this.copyJsonExample.bind(this));
         document.getElementById('downloadJsonExample').addEventListener('click', this.downloadJsonExample.bind(this));
         
-        // JSON format toggle
-        document.getElementById('formatOld').addEventListener('change', this.toggleJsonFormat.bind(this));
-        document.getElementById('formatNew').addEventListener('change', this.toggleJsonFormat.bind(this));
+        // JSON format (only new format now)
         
         // Actions
         document.getElementById('runPacking').addEventListener('click', this.runPacking.bind(this));
@@ -402,6 +400,16 @@ class BinPackingVisualizer {
             this.showToast(`Network error: ${error.message}`, 'danger');
         }
     }
+
+    calculateAspectRatio() {
+        // Calculate proper aspect ratios based on bin dimensions
+        const maxDim = Math.max(this.binSize.length, this.binSize.width, this.binSize.height);
+        return {
+            x: this.binSize.length / maxDim,
+            y: this.binSize.width / maxDim,
+            z: this.binSize.height / maxDim
+        };
+    }
     
     initializePlot() {
         const data = [];
@@ -409,6 +417,8 @@ class BinPackingVisualizer {
         // Create warehouse outline
         const warehouseOutline = this.createWarehouseOutline();
         data.push(warehouseOutline);
+
+        const aspectRatio = this.calculateAspectRatio();
         
         const layout = {
             scene: {
@@ -432,9 +442,14 @@ class BinPackingVisualizer {
                 },
                 bgcolor: '#F8F9FA',
                 camera: {
-                    eye: { x: 1.5, y: 1.5, z: 1.5 }
+                    eye: { x: 1.5 * aspectRatio.x, y: 1.5 * aspectRatio.y, z: 1.5 * aspectRatio.z }
                 },
-                aspectmode: 'cube'
+                aspectmode: 'manual',
+                aspectratio: {
+                    x: aspectRatio.x,
+                    y: aspectRatio.y,
+                    z: aspectRatio.z
+                }
             },
             margin: { l: 0, r: 0, b: 0, t: 0 },
             paper_bgcolor: 'transparent',
@@ -523,6 +538,8 @@ class BinPackingVisualizer {
                 this.showToast(`Displaying first ${maxItems} items for performance. Total: ${packedItems.length}`, 'info');
             }, 100);
         }
+
+        const aspectRatio = this.calculateAspectRatio();
         
         // Update plot
         const layout = {
@@ -547,14 +564,20 @@ class BinPackingVisualizer {
                 },
                 bgcolor: '#F8F9FA',
                 camera: {
-                    eye: { x: 1.5, y: 1.5, z: 1.5 }
+                    eye: { x: 1.5 * aspectRatio.x, y: 1.5 * aspectRatio.y, z: 1.5 * aspectRatio.z }
                 },
-                aspectmode: 'cube'
+                aspectmode: 'manual',
+                aspectratio: {
+                    x: aspectRatio.x,
+                    y: aspectRatio.y,
+                    z: aspectRatio.z
+                }
             },
             margin: { l: 0, r: 0, b: 0, t: 0 },
             paper_bgcolor: 'transparent',
             showlegend: false
         };
+        
         
         Plotly.react('plot3d', data, layout);
         
@@ -597,8 +620,11 @@ class BinPackingVisualizer {
             customdata: item,
             hovertemplate: `
                 <b>Item #${item.id}</b><br>
-                Position: (${item.x}, ${item.y}, ${item.z})<br>
-                Size: ${item.length} × ${item.width} × ${item.height}<br>
+                <b>Request ID:</b> ${item.request_id || item.id}<br>
+                <b>Position:</b> (${item.x}, ${item.y}, ${item.z})<br>
+                <b>Length:</b> ${item.length}<br>
+                <b>Width:</b> ${item.width}<br>
+                <b>Height:</b> ${item.height}<br>
                 <extra></extra>
             `,
             showscale: false,
@@ -964,6 +990,8 @@ class BinPackingVisualizer {
                 data.push(itemMesh);
             });
         }
+
+        const aspectRatio = this.calculateAspectRatio();
         
         // Update plot
         const layout = {
@@ -988,14 +1016,20 @@ class BinPackingVisualizer {
                 },
                 bgcolor: '#F8F9FA',
                 camera: {
-                    eye: { x: 1.5, y: 1.5, z: 1.5 }
+                    eye: { x: 1.5 * aspectRatio.x, y: 1.5 * aspectRatio.y, z: 1.5 * aspectRatio.z }
                 },
-                aspectmode: 'cube'
+                aspectmode: 'manual',
+                aspectratio: {
+                    x: aspectRatio.x,
+                    y: aspectRatio.y,
+                    z: aspectRatio.z
+                }
             },
             margin: { l: 0, r: 0, b: 0, t: 0 },
             paper_bgcolor: 'transparent',
             showlegend: false
         };
+        
         
         Plotly.react('plot3d', data, layout);
     }
@@ -1005,25 +1039,10 @@ class BinPackingVisualizer {
         this.jsonStructureModal.show();
     }
     
-    toggleJsonFormat() {
-        const isNewFormat = document.getElementById('formatNew').checked;
-        const oldExample = document.getElementById('jsonExampleOld');
-        const newExample = document.getElementById('jsonExampleNew');
-        
-        if (isNewFormat) {
-            oldExample.style.display = 'none';
-            newExample.style.display = 'block';
-        } else {
-            oldExample.style.display = 'block';
-            newExample.style.display = 'none';
-        }
-    }
+    // JSON format toggle removed - only using new format now
     
     copyJsonExample() {
-        const isNewFormat = document.getElementById('formatNew').checked;
-        const activeExample = isNewFormat ? 
-            document.getElementById('jsonExampleNew') : 
-            document.getElementById('jsonExampleOld');
+        const activeExample = document.getElementById('jsonExampleNew');
         const jsonText = activeExample.textContent;
         
         if (navigator.clipboard && window.isSecureContext) {
@@ -1057,82 +1076,44 @@ class BinPackingVisualizer {
     }
     
     downloadJsonExample() {
-        const isNewFormat = document.getElementById('formatNew').checked;
-        let exampleData;
-        let filename;
-        
-        if (isNewFormat) {
-            exampleData = {
-                "bin_size": {
-                    "L": 9590,
-                    "W": 2390,
-                    "H": 2570
+        const exampleData = {
+            "bin_size": {
+                "L": 9590,
+                "W": 2390,
+                "H": 2570
+            },
+            "items": [
+                {
+                    "id": 1,
+                    "request_id": 1,
+                    "L": 610.0,
+                    "W": 575.0,
+                    "H": 1005.0,
+                    "quantity": 16
                 },
-                "items": [
-                    {
-                        "id": 1,
-                        "request_id": 1,
-                        "L": 610.0,
-                        "W": 575.0,
-                        "H": 1005.0,
-                        "quantity": 16
-                    },
-                    {
-                        "id": 2,
-                        "request_id": 2,
-                        "L": 1065.0,
-                        "W": 104.0,
-                        "H": 605.0,
-                        "quantity": 40
-                    },
-                    {
-                        "id": 3,
-                        "request_id": 3,
-                        "L": 900.0,
-                        "W": 680.0,
-                        "H": 1870.0,
-                        "quantity": 5
-                    }
-                ],
-                "parameters": {
-                    "stack_rule": [],
-                    "lifo_order": []
+                {
+                    "id": 2,
+                    "request_id": 2,
+                    "L": 1065.0,
+                    "W": 104.0,
+                    "H": 605.0,
+                    "quantity": 40
+                },
+                {
+                    "id": 3,
+                    "request_id": 3,
+                    "L": 900.0,
+                    "W": 680.0,
+                    "H": 1870.0,
+                    "quantity": 5
                 }
-            };
-            filename = 'bin_packing_example_new_format.json';
-        } else {
-            exampleData = {
-                "bin_size": {
-                    "length": 10,
-                    "width": 10,
-                    "height": 10
-                },
-                "items": [
-                    {
-                        "id": 1,
-                        "request_id": 1,
-                        "length": 2,
-                        "width": 1,
-                        "height": 1
-                    },
-                    {
-                        "id": 2,
-                        "request_id": 2,
-                        "length": 3,
-                        "width": 2,
-                        "height": 1
-                    },
-                    {
-                        "id": 3,
-                        "request_id": 3,
-                        "length": 1,
-                        "width": 1,
-                        "height": 2
-                    }
-                ]
-            };
-            filename = 'bin_packing_example_classic.json';
-        }
+            ],
+            "parameters": {
+                "stack_rule": [],
+                "lifo_order": []
+            }
+        };
+        const filename = 'bin_packing_example.json';
         
         const blob = new Blob([JSON.stringify(exampleData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);

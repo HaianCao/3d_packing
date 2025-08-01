@@ -330,17 +330,8 @@
                             Required JSON Format
                         </h6>
                         <p class="text-muted mb-3">
-                            Your JSON file can use either format below. The new format supports quantity for multiple identical items:
+                            Use this JSON structure to upload your data. The format supports quantity fields for multiple identical items:
                         </p>
-                        
-                        <!-- Format Toggle Buttons -->
-                        <div class="btn-group mb-3" role="group" aria-label="JSON Format">
-                            <input type="radio" class="btn-check" name="jsonFormat" id="formatOld" checked>
-                            <label class="btn btn-outline-primary btn-sm" for="formatOld">Classic Format</label>
-                            
-                            <input type="radio" class="btn-check" name="jsonFormat" id="formatNew">
-                            <label class="btn btn-outline-primary btn-sm" for="formatNew">New Format (with Quantity)</label>
-                        </div>
                     </div>
                     
                     <div class="position-relative">
@@ -349,41 +340,8 @@
                             <i class="fas fa-copy me-1"></i>
                             Copy
                         </button>
-                        <!-- Classic Format Example -->
-                        <pre class="bg-light p-3 border rounded json-example" id="jsonExampleOld" style="font-size: 0.9rem; overflow-x: auto;">
-{
-  "bin_size": {
-    "length": 10,
-    "width": 10,
-    "height": 10
-  },
-  "items": [
-    {
-      "id": 1,
-      "request_id": 1,
-      "length": 2,
-      "width": 1,
-      "height": 1
-    },
-    {
-      "id": 2,
-      "request_id": 2,
-      "length": 3,
-      "width": 2,
-      "height": 1
-    },
-    {
-      "id": 3,
-      "request_id": 3,
-      "length": 1,
-      "width": 1,
-      "height": 2
-    }
-  ]
-}</pre>
-                        
-                        <!-- New Format Example -->
-                        <pre class="bg-light p-3 border rounded json-example" id="jsonExampleNew" style="font-size: 0.9rem; overflow-x: auto; display: none;">
+                        <!-- New Format Example (Only) -->
+                        <pre class="bg-light p-3 border rounded json-example" id="jsonExampleNew" style="font-size: 0.9rem; overflow-x: auto;">
 {
   "bin_size": {
     "L": 9590,
@@ -440,19 +398,19 @@
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td><code>bin_size.length</code></td>
+                                        <td><code>bin_size.L</code></td>
                                         <td>Number</td>
                                         <td>Warehouse length dimension</td>
                                         <td><span class="badge bg-success">Yes</span></td>
                                     </tr>
                                     <tr>
-                                        <td><code>bin_size.width</code></td>
+                                        <td><code>bin_size.W</code></td>
                                         <td>Number</td>
                                         <td>Warehouse width dimension</td>
                                         <td><span class="badge bg-success">Yes</span></td>
                                     </tr>
                                     <tr>
-                                        <td><code>bin_size.height</code></td>
+                                        <td><code>bin_size.H</code></td>
                                         <td>Number</td>
                                         <td>Warehouse height dimension</td>
                                         <td><span class="badge bg-success">Yes</span></td>
@@ -460,32 +418,50 @@
                                     <tr>
                                         <td><code>items[].id</code></td>
                                         <td>Number</td>
-                                        <td>Unique identifier for the item</td>
+                                        <td>Unique identifier for the item type</td>
                                         <td><span class="badge bg-success">Yes</span></td>
                                     </tr>
                                     <tr>
                                         <td><code>items[].request_id</code></td>
                                         <td>Number</td>
-                                        <td>Request identifier (can be same as id)</td>
+                                        <td>Request identifier (usually same as id)</td>
                                         <td><span class="badge bg-warning">Optional</span></td>
                                     </tr>
                                     <tr>
-                                        <td><code>items[].length</code></td>
+                                        <td><code>items[].L</code></td>
                                         <td>Number</td>
                                         <td>Item length dimension</td>
                                         <td><span class="badge bg-success">Yes</span></td>
                                     </tr>
                                     <tr>
-                                        <td><code>items[].width</code></td>
+                                        <td><code>items[].W</code></td>
                                         <td>Number</td>
                                         <td>Item width dimension</td>
                                         <td><span class="badge bg-success">Yes</span></td>
                                     </tr>
                                     <tr>
-                                        <td><code>items[].height</code></td>
+                                        <td><code>items[].H</code></td>
                                         <td>Number</td>
                                         <td>Item height dimension</td>
                                         <td><span class="badge bg-success">Yes</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>items[].quantity</code></td>
+                                        <td>Number</td>
+                                        <td>Number of identical items to pack</td>
+                                        <td><span class="badge bg-warning">Optional</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>parameters.stack_rule</code></td>
+                                        <td>Array</td>
+                                        <td>Stacking rules for items (advanced)</td>
+                                        <td><span class="badge bg-secondary">Optional</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>parameters.lifo_order</code></td>
+                                        <td>Array</td>
+                                        <td>LIFO order constraints (advanced)</td>
+                                        <td><span class="badge bg-secondary">Optional</span></td>
                                     </tr>
                                 </tbody>
                             </table>
