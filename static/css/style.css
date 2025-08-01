@@ -1,0 +1,351 @@
+/* Bright Color Palette */
+:root {
+    --primary-bright: #4CAF50;
+    --secondary-bright: #FF9800;
+    --success-bright: #8BC34A;
+    --info-bright: #03A9F4;
+    --warning-bright: #FFC107;
+    --danger-bright: #F44336;
+    --light-bright: #F8F9FA;
+    --dark-bright: #2E7D32;
+    --orange-bright: #FF6B35;
+    --purple-bright: #9C27B0;
+    
+    --gradient-primary: linear-gradient(135deg, #4CAF50, #8BC34A);
+    --gradient-secondary: linear-gradient(135deg, #FF9800, #FFC107);
+    --gradient-info: linear-gradient(135deg, #03A9F4, #81C784);
+}
+
+/* Global Styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #E8F5E8, #F0F8F0);
+    min-height: 100vh;
+}
+
+html, body {
+    height: 100%;
+}
+
+/* Header Styles */
+.bg-primary-bright {
+    background: var(--gradient-primary) !important;
+}
+
+/* Control Panel */
+.control-panel {
+    background: linear-gradient(180deg, #F8F9FA, #E8F5E8) !important;
+    border-right: 2px solid var(--primary-bright);
+    max-height: calc(100vh - 76px);
+    overflow-y: auto;
+}
+
+/* Card Styles */
+.card {
+    border-radius: 12px !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important;
+}
+
+.card-header {
+    border-radius: 12px 12px 0 0 !important;
+    font-weight: 600;
+    border: none !important;
+}
+
+/* Background Colors */
+.bg-success-bright {
+    background: var(--gradient-primary) !important;
+}
+
+.bg-info-bright {
+    background: linear-gradient(135deg, #03A9F4, #29B6F6) !important;
+}
+
+.bg-orange-bright {
+    background: linear-gradient(135deg, #FF6B35, #FF9800) !important;
+}
+
+.bg-purple-bright {
+    background: linear-gradient(135deg, #9C27B0, #AB47BC) !important;
+}
+
+.bg-warning-bright {
+    background: var(--gradient-secondary) !important;
+}
+
+/* Button Styles */
+.btn-primary-bright {
+    background: var(--gradient-primary);
+    border: none;
+    color: white;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+}
+
+.btn-primary-bright:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+    background: linear-gradient(135deg, #45a049, #7cb342);
+}
+
+.btn-success-bright {
+    background: var(--success-bright);
+    border: none;
+    color: white;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.btn-success-bright:hover {
+    background: #7CB342;
+    transform: translateY(-1px);
+}
+
+.btn-info-bright {
+    background: var(--info-bright);
+    border: none;
+    color: white;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.btn-info-bright:hover {
+    background: #0288D1;
+    transform: translateY(-1px);
+}
+
+.btn-warning-bright {
+    background: var(--warning-bright);
+    border: none;
+    color: white;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.btn-warning-bright:hover {
+    background: #FFB300;
+    transform: translateY(-1px);
+}
+
+/* Range Input Styles */
+.range-bright {
+    accent-color: var(--primary-bright);
+}
+
+.range-bright::-webkit-slider-thumb {
+    background: var(--primary-bright);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.range-bright::-webkit-slider-track {
+    background: linear-gradient(to right, var(--primary-bright), var(--success-bright));
+    border-radius: 10px;
+}
+
+/* Form Controls */
+.form-control {
+    border-radius: 8px;
+    border: 2px solid #E0E0E0;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.form-control:focus {
+    border-color: var(--primary-bright);
+    box-shadow: 0 0 0 0.2rem rgba(76, 175, 80, 0.25);
+}
+
+/* Items List */
+.items-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.item-entry {
+    background: linear-gradient(135deg, #FFFFFF, #F8F9FA);
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    margin: 8px;
+    padding: 12px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.item-entry:hover {
+    background: linear-gradient(135deg, #E8F5E8, #F0F8F0);
+    border-color: var(--primary-bright);
+    transform: translateX(5px);
+}
+
+.item-entry small {
+    font-weight: 600;
+}
+
+/* Statistics Badges */
+.stats-badges .badge {
+    font-size: 0.9rem;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+}
+
+/* 3D Plot Container */
+#plot3d {
+    border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #FAFAFA, #F0F8F0);
+}
+
+/* Loading Animations */
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+    .control-panel {
+        max-height: none;
+        border-right: none;
+        border-bottom: 2px solid var(--primary-bright);
+    }
+    
+    .stats-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    
+    .stats-badges .badge {
+        font-size: 0.8rem;
+        padding: 6px 10px;
+    }
+}
+
+@media (max-width: 576px) {
+    .container-fluid {
+        padding: 0;
+    }
+    
+    .control-panel {
+        padding: 1rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .btn {
+        font-size: 0.9rem;
+    }
+}
+
+/* Custom Scrollbar */
+.control-panel::-webkit-scrollbar,
+.items-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.control-panel::-webkit-scrollbar-track,
+.items-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.control-panel::-webkit-scrollbar-thumb,
+.items-list::-webkit-scrollbar-thumb {
+    background: var(--primary-bright);
+    border-radius: 3px;
+}
+
+.control-panel::-webkit-scrollbar-thumb:hover,
+.items-list::-webkit-scrollbar-thumb:hover {
+    background: var(--dark-bright);
+}
+
+/* Animation Classes */
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+}
+
+/* Text Colors */
+.text-primary-bright {
+    color: var(--primary-bright) !important;
+}
+
+.text-success-bright {
+    color: var(--success-bright) !important;
+}
+
+.text-info-bright {
+    color: var(--info-bright) !important;
+}
+
+/* Hover Effects */
+.hover-lift {
+    transition: transform 0.2s ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(-3px);
+}
+
+/* Details Panel */
+#detailsPanel {
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from { 
+        opacity: 0; 
+        transform: translateY(20px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}
+
+/* File Input Styling */
+.form-control[type="file"] {
+    cursor: pointer;
+}
+
+.form-control[type="file"]::-webkit-file-upload-button {
+    background: var(--primary-bright);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin-right: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.form-control[type="file"]::-webkit-file-upload-button:hover {
+    background: var(--dark-bright);
+}
