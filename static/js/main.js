@@ -562,41 +562,82 @@ class BinPackingVisualizer {
                             <div class="bg-light p-3 rounded">
                                 <pre><code>{
   "bin_size": {
-    "length": 1000,
-    "width": 800,
-    "height": 600
+    "length": 5,
+    "width": 3,
+    "height": 3
   },
   "packed_items": [
     {
-      "id": 1,
-      "length": 300,
-      "width": 200,
-      "height": 150,
-      "x": 0,
+      "id": 0,
+      "length": 1,
+      "width": 2,
+      "height": 1,
+      "x": 2,
       "y": 0,
-      "z": 0
+      "z": 0,
+      "item_type_id": 0,
+      "request_id": 0,
+      "pack_order": 1,
+      "position_index": 1,
+      "rotation_id": 1,
+      "total_positions": 1,
+      "original_length": 2,
+      "original_width": 1,
+      "original_height": 1
     },
     {
-      "id": 2,
-      "length": 250,
-      "width": 180,
-      "height": 120,
-      "x": 300,
-      "y": 0,
-      "z": 0
+      "id": 1,
+      "length": 2,
+      "width": 1,
+      "height": 1,
+      "x": 0,
+      "y": 2,
+      "z": 0,
+      "item_type_id": 1,
+      "request_id": 1,
+      "pack_order": 2,
+      "position_index": 1,
+      "rotation_id": 0,
+      "total_positions": 1,
+      "original_length": 2,
+      "original_width": 1,
+      "original_height": 1
     }
-  ]
+  ],
+  "leftover_items": [
+    {
+      "height": 1870,
+      "id": 84,
+      "length": 900,
+      "quantity": 1,
+      "width": 680
+    },
+    {
+      "height": 1200,
+      "id": 85,
+      "length": 800,
+      "quantity": 2,
+      "width": 600
+    }
+  ],
+  "packing_time": 0.55,
+  "utilization": 44.44
 }</code></pre>
                             </div>
                             <div class="mt-3">
                                 <h6>Format Details:</h6>
                                 <ul>
                                     <li><strong>bin_size:</strong> Warehouse dimensions (length, width, height)</li>
-                                    <li><strong>packed_items:</strong> Array of packed items with coordinates</li>
+                                    <li><strong>packed_items:</strong> Array of successfully packed items with coordinates and rotation info</li>
+                                    <li><strong>leftover_items:</strong> Array of items that couldn't be packed with original dimensions and quantity</li>
+                                    <li><strong>packing_time:</strong> Processing time in seconds (float)</li>
+                                    <li><strong>utilization:</strong> Space utilization percentage (float)</li>
                                     <li><strong>id:</strong> Unique identifier for each item</li>
-                                    <li><strong>length, width, height:</strong> Item dimensions</li>
-                                    <li><strong>x, y, z:</strong> Item position coordinates in the warehouse</li>
-                                    <li><strong>Note:</strong> Only packed items are visualized, leftover items are ignored</li>
+                                    <li><strong>length, width, height:</strong> Item dimensions after rotation</li>
+                                    <li><strong>original_length, original_width, original_height:</strong> Original item dimensions before rotation</li>
+                                    <li><strong>x, y, z:</strong> Item position coordinates in the warehouse (only for packed items)</li>
+                                    <li><strong>rotation_id:</strong> Applied rotation (0=no rotation, 1=90° rotation, etc.)</li>
+                                    <li><strong>pack_order:</strong> Order in which items were packed</li>
                                 </ul>
                             </div>
                         </div>
@@ -803,7 +844,7 @@ class BinPackingVisualizer {
         // Update stats
         document.getElementById('placedBadge').textContent = `Packed: ${packedItems.length}`;
         document.getElementById('leftoverBadge').textContent = `Leftover: ${leftoverItems.length}`;
-        const utilization = result.utilization ? `${result.utilization.toFixed(1)}%` : 'N/A';
+        const utilization = result.utilization ? `${(result.utilization * 100).toFixed(1)}%` : 'N/A';
         document.getElementById('utilizationBadge').textContent = `Utilization: ${utilization}`;
     }
     
@@ -1256,7 +1297,7 @@ class BinPackingVisualizer {
         if (this.packedResults) {
             const placed = (this.packedResults.packed_items || []).length;
             const leftover = (this.packedResults.leftover_items || []).length;
-            const utilization = Math.round(this.packedResults.utilization || 0);
+            const utilization = Math.round((this.packedResults.utilization || 0) * 100);
             
             placedBadge.innerHTML = `<i class="fas fa-check-circle me-1"></i>Placed: ${placed}`;
             leftoverBadge.innerHTML = `<i class="fas fa-exclamation-circle me-1"></i>Leftover: ${leftover}`;

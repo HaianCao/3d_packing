@@ -4,9 +4,6 @@ import json
 import logging
 import requests
 from urllib.parse import urlparse
-from numba import njit
-
-@njit
 def get_rotation_by_id(l0, w0, h0, rotation_id, lock_axis):
     """
     Trả về (l, w, h) đã xoay tương ứng với rotation_id.
@@ -165,6 +162,9 @@ def pack_items():
         # Default lifo order - không có ràng buộc LIFO
         default_lifo_order = [0] * num_unique_items
         
+        # Extract parameters from input data
+        input_parameters = data.get('parameters', {})
+        
         packing_request = {
             "items": [],
             "bin_size": {
@@ -173,12 +173,9 @@ def pack_items():
                 "H": bin_height
             },
             "parameters": {
-                "stack_rule": data.get('stack_rule', default_stack_rule),
-                "lifo_order": data.get('lifo_order', default_lifo_order)
-            },
-            "options": {
-                "use_local_search": False,
-                "weights": data.get('weights', [5, 1, 1, 5, 5, 1, 1, 1, 3, -1000, -1, -1, -1000])
+                "stack_rule": input_parameters.get('stack_rule', default_stack_rule),
+                "lifo_order": input_parameters.get('lifo_order', default_lifo_order),
+                "weights": input_parameters.get('weights', [5, 1, 1, 5, 5, 1, 1, 1, 3, -1000, -1, -1, -1000])
             }
         }
         
@@ -303,9 +300,16 @@ def pack_items():
                                 'height': item_group['H']
                             })
                 
-                # Tính utilization
-                total_items = len(packed_items) + len(leftover_items)
-                utilization = len(packed_items) / total_items if total_items > 0 else 0
+                # Tính utilization dựa trên volume, không phải số lượng items
+                bin_volume = bin_length * bin_width * bin_height
+                
+                # Tính tổng volume của items đã pack (sử dụng kích thước thực tế sau khi xoay)
+                packed_volume = 0
+                for item in packed_items:
+                    packed_volume += item['length'] * item['width'] * item['height']
+                
+                # Utilization = volume used / total bin volume
+                utilization = packed_volume / bin_volume if bin_volume > 0 else 0
                 
                 # Tạo packing steps từ packed_items theo thứ tự pack_order
                 packing_steps = []
