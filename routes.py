@@ -165,6 +165,26 @@ def pack_items():
         # Extract parameters from input data
         input_parameters = data.get('parameters', {})
         
+        # Handle weights parameter - pass through original format to let algorithm decide
+        weights_param = input_parameters.get('weights')
+        if weights_param is not None:
+            # Pass weights in original format (object or array)
+            weights_value = weights_param
+            logging.info(f"Passing weights in original format: {type(weights_param).__name__} with {len(weights_param) if hasattr(weights_param, '__len__') else 'N/A'} items")
+        else:
+            # Default weights object for new format
+            weights_value = {
+                "W_lifo": 10.0,
+                "W_sim_l": -1.0,
+                "W_sim_w": -1.0,
+                "W_sim_h": 0.0,
+                "W_leftover_l_ratio": -5.0,
+                "W_leftover_w_ratio": -5.0,
+                "W_packable_l": -0.5,
+                "W_packable_w": -0.5
+            }
+            logging.info(f"Using default weights object: {weights_value}")
+        
         packing_request = {
             "items": [],
             "bin_size": {
@@ -175,7 +195,7 @@ def pack_items():
             "parameters": {
                 "stack_rule": input_parameters.get('stack_rule', default_stack_rule),
                 "lifo_order": input_parameters.get('lifo_order', default_lifo_order),
-                "weights": input_parameters.get('weights', [5, 1, 1, 5, 5, 1, 1, 1, 3, -1000, -1, -1, -1000])
+                "weights": weights_value
             }
         }
         
