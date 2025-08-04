@@ -185,6 +185,170 @@ def validate_json():
             'message': f'Validation error: {str(e)}'
         }), 500
 
+@app.route('/visualize', methods=['POST'])
+def visualize_items():
+    """API endpoint for visualizing items without packing"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'}), 400
+        
+        # Get bin size
+        bin_size = data.get('bin_size', {})
+        bin_length = int(bin_size.get('length', 10))
+        bin_width = int(bin_size.get('width', 10))
+        bin_height = int(bin_size.get('height', 10))
+        
+        # Get items
+        items = data.get('items', [])
+        
+        if not items:
+            return jsonify({'success': False, 'message': 'No items to visualize'}), 400
+        
+        # Convert items to visualization format
+        visualization_items = []
+        for i, item in enumerate(items):
+            # Support both formats
+            if 'L' in item and 'W' in item and 'H' in item:
+                # New format
+                quantity = item.get('quantity', 1)
+                for q in range(quantity):
+                    visualization_items.append({
+                        'id': f"{item['id']}_{q}" if quantity > 1 else item['id'],
+                        'length': item['L'],
+                        'width': item['W'],
+                        'height': item['H'],
+                        'x': 0,  # Place all items at origin for visualization
+                        'y': 0,
+                        'z': 0,
+                        'color': f'hsl({(i * 137.5) % 360}, 70%, 50%)'  # Generate colors
+                    })
+            else:
+                # Old format
+                visualization_items.append({
+                    'id': item['id'],
+                    'length': item['length'],
+                    'width': item['width'],
+                    'height': item['height'],
+                    'x': 0,
+                    'y': 0,
+                    'z': 0,
+                    'color': f'hsl({(i * 137.5) % 360}, 70%, 50%)'
+                })
+        
+        return jsonify({
+            'success': True,
+            'visualization_items': visualization_items,
+            'bin_size': {
+                'length': bin_length,
+                'width': bin_width,
+                'height': bin_height
+            },
+            'item_count': len(visualization_items)
+        })
+        
+    except Exception as e:
+        logging.error(f"Visualization error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Visualization error: {str(e)}'
+        }), 500
+
+@app.route('/export_items', methods=['POST'])
+def export_items():
+    """Export current items list as JSON"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'}), 400
+        
+        items = data.get('items', [])
+        bin_size = data.get('bin_size', {})
+        
+        # Format for export using new L/W/H format
+        export_data = {
+            'bin_size': {
+                'L': bin_size.get('length', 10),
+                'W': bin_size.get('width', 10),
+                'H': bin_size.get('height', 10)
+            },
+            'items': []
+        }
+        
+        # Group items by dimensions to combine quantity
+        item_groups = {}
+        for item in items:
+            key = f"{item['length']}x{item['width']}x{item['height']}"
+            if key not in item_groups:
+                item_groups[key] = {
+                    'id': item['id'],
+                    'L': item['length'],
+                    'W': item['width'],
+                    'H': item['height'],
+                    'quantity': 0
+                }
+            item_groups[key]['quantity'] += 1
+        
+        export_data['items'] = list(item_groups.values())
+        
+        return jsonify({
+            'success': True,
+            'export_data': export_data
+        })
+        
+    except Exception as e:
+        logging.error(f"Export error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Export error: {str(e)}'
+        }), 500
+
+@app.route('/export_results', methods=['POST'])
+def export_results():
+    """Export packing results as JSON"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'}), 400
+        
+        # Format results for export - structure compatible with visualization only
+        export_data = {
+            'bin_size': {
+                'length': data.get('bin_size', {}).get('length', 10),
+                'width': data.get('bin_size', {}).get('width', 10),
+                'height': data.get('bin_size', {}).get('height', 10)
+            },
+            'packed_items': data.get('packed_items', []),
+            'leftover_items': [],
+            'utilization': data.get('utilization', 0),
+            'packing_time': data.get('packing_time', 0)
+        }
+        
+        # Convert leftover items to export format  
+        for item in data.get('leftover_items', []):
+            export_data['leftover_items'].append({
+                'id': item['id'],
+                'length': item['length'],
+                'width': item['width'],
+                'height': item['height'],
+                'quantity': 1
+            })
+        
+        return jsonify({
+            'success': True,
+            'export_data': export_data
+        })
+        
+    except Exception as e:
+        logging.error(f"Export results error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Export results error: {str(e)}'
+        }), 500
+
 @app.errorhandler(404)
 def not_found(error):
     return render_template('index.html'), 404
