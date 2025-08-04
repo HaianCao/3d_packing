@@ -233,6 +233,28 @@
                         </div>
                     </div>
 
+                    <!-- Weights Configuration -->
+                    <div class="card mb-4 border-0 shadow-sm" id="weightsCard" style="display: none;">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-balance-scale me-2"></i>
+                                Algorithm Weights
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-muted mb-3">
+                                <small><i class="fas fa-info-circle me-1"></i>
+                                These parameters will be loaded automatically from your JSON file</small>
+                            </div>
+                            <div id="weightsDisplay">
+                                <div class="text-center text-muted">
+                                    <i class="fas fa-upload fa-2x mb-2"></i>
+                                    <p>Import a JSON file with weights to configure algorithm parameters</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Action Buttons (Secondary Actions) -->
                     <div class="card border-0 shadow-sm">
                         <div class="card-body">
@@ -431,41 +453,26 @@
                         <!-- New Format Example (Only) -->
                         <pre class="bg-light p-3 border rounded json-example" id="jsonExampleNew" style="font-size: 0.9rem; overflow-x: auto;">
 {
+  "items": [
+    {
+      "id": 0,
+      "request_id": 1,
+      "L": 983,
+      "W": 375,
+      "H": 2470,
+      "num_axis": 2,
+      "quantity": 5
+    }
+  ],
   "bin_size": {
     "L": 9590,
     "W": 2390,
     "H": 2570
   },
-  "items": [
-    {
-      "id": 1,
-      "request_id": 1,
-      "L": 610.0,
-      "W": 575.0,
-      "H": 1005.0,
-      "quantity": 16
-    },
-    {
-      "id": 2,
-      "request_id": 2,
-      "L": 1065.0,
-      "W": 104.0,
-      "H": 605.0,
-      "quantity": 40
-    },
-    {
-      "id": 3,
-      "request_id": 3,
-      "L": 900.0,
-      "W": 680.0,
-      "H": 1870.0,
-      "quantity": 5
-    }
-  ],
   "parameters": {
     "stack_rule": [],
     "lifo_order": [],
-    "weights": [5, 1, 1, 5, 5, 1, 1, 1, 3, -1000, -1, -1, -1000]
+    "weights": {}
   }
 }</pre>
                     </div>
@@ -513,8 +520,8 @@
                                     <tr>
                                         <td><code>items[].request_id</code></td>
                                         <td>Number</td>
-                                        <td>Request identifier (usually same as id)</td>
-                                        <td><span class="badge bg-warning">Optional</span></td>
+                                        <td>Unique request identifier for each item instance</td>
+                                        <td><span class="badge bg-success">Yes</span></td>
                                     </tr>
                                     <tr>
                                         <td><code>items[].L</code></td>
@@ -535,6 +542,12 @@
                                         <td><span class="badge bg-success">Yes</span></td>
                                     </tr>
                                     <tr>
+                                        <td><code>items[].num_axis</code></td>
+                                        <td>Number</td>
+                                        <td>Number of rotation axes (2 or 6)</td>
+                                        <td><span class="badge bg-warning">Optional</span></td>
+                                    </tr>
+                                    <tr>
                                         <td><code>items[].quantity</code></td>
                                         <td>Number</td>
                                         <td>Number of identical items to pack</td>
@@ -542,8 +555,8 @@
                                     </tr>
                                     <tr>
                                         <td><code>parameters.weights</code></td>
-                                        <td>Array</td>
-                                        <td>Vector of algorithm weights for optimization (13 values)</td>
+                                        <td>Object</td>
+                                        <td>Algorithm weight parameters for optimization</td>
                                         <td><span class="badge bg-warning">Optional</span></td>
                                     </tr>
                                     <tr>

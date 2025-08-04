@@ -347,6 +347,13 @@ class BinPackingVisualizer {
             this.updateItemsList();
             this.updateWarehouseDisplay();
             
+            // Display weights if available
+            if (data.parameters && data.parameters.weights) {
+                this.displayWeights(data.parameters.weights);
+            } else {
+                this.hideWeights();
+            }
+            
             this.nextItemId = Math.max(...this.items.map(item => item.id), 0) + 1;
             this.updateItemId();
             
@@ -584,24 +591,6 @@ class BinPackingVisualizer {
       "original_length": 2,
       "original_width": 1,
       "original_height": 1
-    },
-    {
-      "id": 1,
-      "length": 2,
-      "width": 1,
-      "height": 1,
-      "x": 0,
-      "y": 2,
-      "z": 0,
-      "item_type_id": 1,
-      "request_id": 1,
-      "pack_order": 2,
-      "position_index": 1,
-      "rotation_id": 0,
-      "total_positions": 1,
-      "original_length": 2,
-      "original_width": 1,
-      "original_height": 1
     }
   ],
   "leftover_items": [
@@ -611,13 +600,6 @@ class BinPackingVisualizer {
       "length": 900,
       "quantity": 1,
       "width": 680
-    },
-    {
-      "height": 1200,
-      "id": 85,
-      "length": 800,
-      "quantity": 2,
-      "width": 600
     }
   ],
   "packing_time": 0.55,
@@ -975,6 +957,15 @@ class BinPackingVisualizer {
                 items: this.items,
                 algorithm_steps: true
             };
+
+            // Add current weights if available
+            const currentWeights = this.getCurrentWeights();
+            if (currentWeights) {
+                requestData.parameters = {
+                    weights: currentWeights
+                };
+                console.log('Sending weights with request:', currentWeights);
+            }
             
             console.log('Request data:', requestData);
             
@@ -1818,40 +1809,26 @@ class BinPackingVisualizer {
     
     downloadJsonExample() {
         const exampleData = {
+            "items": [
+                {
+                    "id": 0,
+                    "request_id": 1,
+                    "L": 983,
+                    "W": 375,
+                    "H": 2470,
+                    "num_axis": 2,
+                    "quantity": 5
+                }
+            ],
             "bin_size": {
                 "L": 9590,
                 "W": 2390,
                 "H": 2570
             },
-            "items": [
-                {
-                    "id": 1,
-                    "request_id": 1,
-                    "L": 610.0,
-                    "W": 575.0,
-                    "H": 1005.0,
-                    "quantity": 16
-                },
-                {
-                    "id": 2,
-                    "request_id": 2,
-                    "L": 1065.0,
-                    "W": 104.0,
-                    "H": 605.0,
-                    "quantity": 40
-                },
-                {
-                    "id": 3,
-                    "request_id": 3,
-                    "L": 900.0,
-                    "W": 680.0,
-                    "H": 1870.0,
-                    "quantity": 5
-                }
-            ],
             "parameters": {
                 "stack_rule": [],
-                "lifo_order": []
+                "lifo_order": [],
+                "weights": {}
             }
         };
         const filename = 'bin_packing_example.json';
@@ -1867,6 +1844,93 @@ class BinPackingVisualizer {
         URL.revokeObjectURL(url);
         
         this.showToast('Example JSON file downloaded!', 'success');
+    }
+
+    displayWeights(weights) {
+        const weightsCard = document.getElementById('weightsCard');
+        const weightsDisplay = document.getElementById('weightsDisplay');
+        
+        if (typeof weights === 'object' && weights !== null && !Array.isArray(weights)) {
+            // New object format - display as editable list
+            let html = '<div class="list-group list-group-flush">';
+            
+            Object.entries(weights).forEach(([key, value]) => {
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                        <span class="text-dark fw-medium">${key}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="number" 
+                                   class="form-control form-control-sm weight-input" 
+                                   data-weight-key="${key}"
+                                   value="${value}" 
+                                   step="0.1" 
+                                   style="width: 80px;">
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            weightsDisplay.innerHTML = html;
+            
+            // Store initial weights  
+            this.currentWeights = {...weights};
+            
+            // Add event listeners for weight changes
+            this.attachWeightChangeListeners();
+        } else if (Array.isArray(weights)) {
+            // Legacy array format - show simplified view
+            weightsDisplay.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Legacy weights format detected</strong><br>
+                    Array with ${weights.length} values: [${weights.slice(0, 3).join(', ')}${weights.length > 3 ? ', ...' : ''}]
+                </div>
+            `;
+        }
+        
+        weightsCard.style.display = 'block';
+    }
+
+    hideWeights() {
+        const weightsCard = document.getElementById('weightsCard');
+        weightsCard.style.display = 'none';
+    }
+
+    attachWeightChangeListeners() {
+        const weightInputs = document.querySelectorAll('.weight-input');
+        weightInputs.forEach(input => {
+            input.addEventListener('input', (e) => {
+                const key = e.target.dataset.weightKey;
+                const value = parseFloat(e.target.value) || 0;
+                
+                // Update current weights object
+                if (!this.currentWeights) {
+                    this.currentWeights = {};
+                }
+                this.currentWeights[key] = value;
+                
+                console.log(`Updated weight ${key} to ${value}`);
+            });
+        });
+    }
+
+    getCurrentWeights() {
+        // Get current weights from UI inputs or stored weights
+        if (this.currentWeights) {
+            return this.currentWeights;
+        }
+        
+        // If no current weights, try to get from inputs
+        const weights = {};
+        const weightInputs = document.querySelectorAll('.weight-input');
+        weightInputs.forEach(input => {
+            const key = input.dataset.weightKey;
+            const value = parseFloat(input.value) || 0;
+            weights[key] = value;
+        });
+        
+        return Object.keys(weights).length > 0 ? weights : null;
     }
 }
 
