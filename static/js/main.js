@@ -6,6 +6,9 @@ class BinPackingVisualizer {
         this.nextItemId = 1;
         this.loadingModal = null;
         
+        // Store original input data for export
+        this.originalInputData = null;
+        
         // Step-by-step visualization
         this.packingSteps = [];
         this.currentStepIndex = -1;
@@ -44,6 +47,14 @@ class BinPackingVisualizer {
         document.getElementById('showJsonStructure').addEventListener('click', this.showJsonStructure.bind(this));
         document.getElementById('copyJsonExample').addEventListener('click', this.copyJsonExample.bind(this));
         document.getElementById('downloadJsonExample').addEventListener('click', this.downloadJsonExample.bind(this));
+        
+        // Export functions
+        document.getElementById('exportItems').addEventListener('click', this.exportOriginalFile.bind(this));
+        document.getElementById('exportItemsList').addEventListener('click', this.exportItemsList.bind(this));
+        
+        // Visualization only upload
+        document.getElementById('uploadVisualizationOnly').addEventListener('click', this.uploadVisualizationOnly.bind(this));
+        document.getElementById('showVisualizationFormat').addEventListener('click', this.showVisualizationFormat.bind(this));
         
         // JSON format (only new format now)
         
@@ -234,8 +245,15 @@ class BinPackingVisualizer {
                     <p>No items added yet</p>
                 </div>
             `;
+            // Disable export items buttons when no items
+            document.getElementById('exportItems').disabled = true;
+            document.getElementById('exportItemsList').disabled = true;
             return;
         }
+        
+        // Enable export items buttons when items exist
+        document.getElementById('exportItems').disabled = false;
+        document.getElementById('exportItemsList').disabled = false;
         
         // Group items by request_id for display similar to JSON upload
         const groupedItems = {};
@@ -303,6 +321,9 @@ class BinPackingVisualizer {
                 return;
             }
             
+            // Store original input data for export
+            this.originalInputData = data;
+            
             // Apply data - use processed items from server if available
             if (result.processed_items) {
                 this.items = result.processed_items;
@@ -337,6 +358,453 @@ class BinPackingVisualizer {
         } catch (error) {
             this.showToast(`Failed to load JSON file: ${error.message}`, 'danger');
         }
+    }
+
+
+
+    visualizeItemsOnly(items) {
+        // Create plot data for visualization only
+        const traces = [];
+        
+        // Add bin outline
+        traces.push(this.createWarehouseOutline());
+        
+        // Add items as colored boxes
+        items.forEach((item, index) => {
+            const color = item.color || `hsl(${(index * 137.5) % 360}, 70%, 50%)`;
+            
+            traces.push({
+                type: 'mesh3d',
+                x: [item.x, item.x + item.length, item.x + item.length, item.x,
+                    item.x, item.x + item.length, item.x + item.length, item.x],
+                y: [item.y, item.y, item.y + item.width, item.y + item.width,
+                    item.y, item.y, item.y + item.width, item.y + item.width],
+                z: [item.z, item.z, item.z, item.z,
+                    item.z + item.height, item.z + item.height, item.z + item.height, item.z + item.height],
+                i: [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+                j: [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+                k: [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
+                color: color,
+                opacity: 0.8,
+                name: `Item ${item.id}`,
+                hovertemplate: `<b>Item ${item.id}</b><br>` +
+                              `Size: ${item.length}×${item.width}×${item.height}<br>` +
+                              `Position: (${item.x}, ${item.y}, ${item.z})<br>` +
+                              '<extra></extra>'
+            });
+        });
+        
+        const layout = {
+            scene: {
+                xaxis: { title: 'Length', range: [0, this.binSize.length] },
+                yaxis: { title: 'Width', range: [0, this.binSize.width] },
+                zaxis: { title: 'Height', range: [0, this.binSize.height] },
+                aspectmode: 'cube'
+            },
+            title: 'Items Visualization (No Packing)',
+            showlegend: false,
+            margin: { l: 0, r: 0, b: 0, t: 30 }
+        };
+        
+        Plotly.newPlot('plot3d', traces, layout);
+        
+        // Update stats
+        document.getElementById('placedBadge').textContent = `Visualized: ${items.length}`;
+        document.getElementById('leftoverBadge').textContent = 'Leftover: 0';
+        document.getElementById('utilizationBadge').textContent = 'Utilization: N/A';
+    }
+
+    async uploadVisualizationOnly() {
+        const fileInput = document.getElementById('visualizeFile');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            this.showToast('Please select a JSON file for visualization', 'warning');
+            return;
+        }
+        
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            
+            // Validate that the data has the expected packing result structure
+            if (!data.bin_size || !data.packed_items) {
+                this.showToast('Invalid format: Expected packing result structure with bin_size and packed_items', 'danger');
+                return;
+            }
+            
+            // Extract bin size
+            const binSize = data.bin_size;
+            this.binSize = {
+                length: binSize.length || binSize.L || 10,
+                width: binSize.width || binSize.W || 10,
+                height: binSize.height || binSize.H || 10
+            };
+            
+            // Update UI with bin size
+            document.getElementById('binLength').value = this.binSize.length;
+            document.getElementById('binWidth').value = this.binSize.width;
+            document.getElementById('binHeight').value = this.binSize.height;
+            this.updateBinSize();
+            
+            // Use packed items directly for visualization
+            const packedItems = data.packed_items || [];
+            const leftoverItems = data.leftover_items || [];
+            
+            // Set packed results to enable full interface like packing algorithm
+            this.packedResults = {
+                packed_items: packedItems,
+                leftover_items: leftoverItems,
+                utilization: data.utilization || 0,
+                packing_time: data.packing_time || 0,
+                bin_size: this.binSize,
+                steps: [] // Empty steps for visualization only
+            };
+            
+            // Use same visualization flow as packing algorithm
+            setTimeout(() => {
+                try {
+                    // Use the regular visualization function to match packing algorithm interface
+                    this.visualizePacking();
+                    
+                    // Update stats like packing algorithm
+                    this.updateStats();
+                    
+                    // Show step controls (even if empty)
+                    this.initializeStepControls();
+                    
+                    // Show items information panel
+                    this.displayItemsInfo(packedItems, leftoverItems);
+                    
+                    // Enable export like packing algorithm
+                    document.getElementById('exportResults').disabled = false;
+                    document.getElementById('exportItemsList').disabled = false;
+                    
+                    this.showToast(`Visualized ${packedItems.length} packed items from result file`, 'success');
+                } catch (error) {
+                    console.error('Visualization error:', error);
+                    this.showToast('Error rendering visualization. Please try again.', 'danger');
+                }
+            }, 10);
+            
+        } catch (error) {
+            this.showToast(`Failed to load packing result file: ${error.message}`, 'danger');
+        }
+    }
+
+    visualizePackedItems(packedItems) {
+        // Create plot data for packed items with their coordinates
+        const traces = [];
+        
+        // Add warehouse outline
+        traces.push(this.createWarehouseOutline());
+        
+        // Add each packed item as a colored box at its packed position
+        packedItems.forEach((item, index) => {
+            const color = `hsl(${(index * 137.5) % 360}, 70%, 50%)`;
+            
+            traces.push({
+                type: 'mesh3d',
+                x: [item.x, item.x + item.length, item.x + item.length, item.x,
+                    item.x, item.x + item.length, item.x + item.length, item.x],
+                y: [item.y, item.y, item.y + item.width, item.y + item.width,
+                    item.y, item.y, item.y + item.width, item.y + item.width],
+                z: [item.z, item.z, item.z, item.z,
+                    item.z + item.height, item.z + item.height, item.z + item.height, item.z + item.height],
+                i: [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+                j: [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+                k: [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
+                color: color,
+                opacity: 0.8,
+                name: `Item ${item.id}`,
+                hovertemplate: `<b>Item ${item.id}</b><br>` +
+                              `Size: ${item.length}×${item.width}×${item.height}<br>` +
+                              `Position: (${item.x}, ${item.y}, ${item.z})<br>` +
+                              '<extra></extra>'
+            });
+        });
+        
+        const layout = {
+            scene: {
+                xaxis: { title: 'Length', range: [0, this.binSize.length] },
+                yaxis: { title: 'Width', range: [0, this.binSize.width] },
+                zaxis: { title: 'Height', range: [0, this.binSize.height] },
+                aspectmode: 'cube'
+            },
+            title: 'Packed Items Visualization',
+            showlegend: false,
+            margin: { l: 0, r: 0, b: 0, t: 30 }
+        };
+        
+        Plotly.newPlot('plot3d', traces, layout);
+        
+        // Update stats
+        document.getElementById('placedBadge').textContent = `Packed: ${packedItems.length}`;
+        document.getElementById('leftoverBadge').textContent = 'Leftover: N/A';
+        document.getElementById('utilizationBadge').textContent = 'Utilization: N/A';
+    }
+
+    showVisualizationFormat() {
+        // Create and show a modal with visualization JSON format
+        const modalContent = `
+            <div class="modal fade" id="visualizationFormatModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-secondary text-white">
+                            <h5 class="modal-title">
+                                <i class="fas fa-eye me-2"></i>
+                                Visualization JSON Format
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-3">Use this JSON format for visualization-only uploads (packing result structure):</p>
+                            <div class="bg-light p-3 rounded">
+                                <pre><code>{
+  "bin_size": {
+    "length": 1000,
+    "width": 800,
+    "height": 600
+  },
+  "packed_items": [
+    {
+      "id": 1,
+      "length": 300,
+      "width": 200,
+      "height": 150,
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    {
+      "id": 2,
+      "length": 250,
+      "width": 180,
+      "height": 120,
+      "x": 300,
+      "y": 0,
+      "z": 0
+    }
+  ]
+}</code></pre>
+                            </div>
+                            <div class="mt-3">
+                                <h6>Format Details:</h6>
+                                <ul>
+                                    <li><strong>bin_size:</strong> Warehouse dimensions (length, width, height)</li>
+                                    <li><strong>packed_items:</strong> Array of packed items with coordinates</li>
+                                    <li><strong>id:</strong> Unique identifier for each item</li>
+                                    <li><strong>length, width, height:</strong> Item dimensions</li>
+                                    <li><strong>x, y, z:</strong> Item position coordinates in the warehouse</li>
+                                    <li><strong>Note:</strong> Only packed items are visualized, leftover items are ignored</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" id="copyVisualizationExample">
+                                <i class="fas fa-copy me-2"></i>
+                                Copy Example
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="downloadVisualizationExample">
+                                <i class="fas fa-download me-2"></i>
+                                Download Example
+                            </button>
+                            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if it exists
+        const existingModal = document.getElementById('visualizationFormatModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to DOM
+        document.body.insertAdjacentHTML('beforeend', modalContent);
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('visualizationFormatModal'));
+        modal.show();
+        
+        // Add event listeners for copy and download
+        document.getElementById('copyVisualizationExample').addEventListener('click', this.copyVisualizationExample.bind(this));
+        document.getElementById('downloadVisualizationExample').addEventListener('click', this.downloadVisualizationExample.bind(this));
+    }
+
+    copyVisualizationExample() {
+        const example = {
+            bin_size: {
+                length: 1000,
+                width: 800,
+                height: 600
+            },
+            packed_items: [
+                {
+                    id: 1,
+                    length: 300,
+                    width: 200,
+                    height: 150,
+                    x: 0,
+                    y: 0,
+                    z: 0
+                },
+                {
+                    id: 2,
+                    length: 250,
+                    width: 180,
+                    height: 120,
+                    x: 300,
+                    y: 0,
+                    z: 0
+                }
+            ]
+        };
+        
+        navigator.clipboard.writeText(JSON.stringify(example, null, 2)).then(() => {
+            this.showToast('Visualization example copied to clipboard!', 'success');
+        }).catch(() => {
+            this.showToast('Failed to copy to clipboard', 'danger');
+        });
+    }
+
+    downloadVisualizationExample() {
+        const example = {
+            bin_size: {
+                length: 1000,
+                width: 800,
+                height: 600
+            },
+            packed_items: [
+                {
+                    id: 1,
+                    length: 300,
+                    width: 200,
+                    height: 150,
+                    x: 0,
+                    y: 0,
+                    z: 0
+                },
+                {
+                    id: 2,
+                    length: 250,
+                    width: 180,
+                    height: 120,
+                    x: 300,
+                    y: 0,
+                    z: 0
+                }
+            ]
+        };
+        
+        const blob = new Blob([JSON.stringify(example, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'visualization_example.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        this.showToast('Visualization example downloaded!', 'success');
+    }
+
+    displayItemsInfo(packedItems, leftoverItems = []) {
+        const tableBody = document.getElementById('itemsInfoTable');
+        tableBody.innerHTML = '';
+        
+        // Show packed items
+        packedItems.forEach(item => {
+            const volume = item.length * item.width * item.height;
+            const row = tableBody.insertRow();
+            row.innerHTML = `
+                <td><strong>${item.id}</strong></td>
+                <td>${item.length}</td>
+                <td>${item.width}</td>
+                <td>${item.height}</td>
+                <td>${volume.toLocaleString()}</td>
+                <td><span class="badge bg-success">Packed</span></td>
+                <td>(${item.x}, ${item.y}, ${item.z})</td>
+            `;
+        });
+        
+        // Show leftover items if any
+        leftoverItems.forEach(item => {
+            const volume = item.length * item.width * item.height;
+            const row = tableBody.insertRow();
+            row.innerHTML = `
+                <td><strong>${item.id}</strong></td>
+                <td>${item.length}</td>
+                <td>${item.width}</td>
+                <td>${item.height}</td>
+                <td>${volume.toLocaleString()}</td>
+                <td><span class="badge bg-warning">Leftover</span></td>
+                <td>-</td>
+            `;
+        });
+        
+        // Show the items info panel
+        document.getElementById('itemsInfoPanel').style.display = 'block';
+    }
+
+    visualizeResults(result) {
+        // Use the common visualize function for both packing results and visualization-only
+        const packedItems = result.packed_items || [];
+        const leftoverItems = result.leftover_items || [];
+        
+        // Create plot data
+        const traces = [];
+        
+        // Add warehouse outline
+        traces.push(this.createWarehouseOutline());
+        
+        // Add each packed item as a colored box at its packed position
+        packedItems.forEach((item, index) => {
+            const color = `hsl(${(index * 137.5) % 360}, 70%, 50%)`;
+            
+            traces.push({
+                type: 'mesh3d',
+                x: [item.x, item.x + item.length, item.x + item.length, item.x,
+                    item.x, item.x + item.length, item.x + item.length, item.x],
+                y: [item.y, item.y, item.y + item.width, item.y + item.width,
+                    item.y, item.y, item.y + item.width, item.y + item.width],
+                z: [item.z, item.z, item.z, item.z,
+                    item.z + item.height, item.z + item.height, item.z + item.height, item.z + item.height],
+                i: [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+                j: [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+                k: [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
+                color: color,
+                opacity: 0.8,
+                name: `Item ${item.id}`,
+                hovertemplate: `<b>Item ${item.id}</b><br>` +
+                              `Size: ${item.length}×${item.width}×${item.height}<br>` +
+                              `Position: (${item.x}, ${item.y}, ${item.z})<br>` +
+                              '<extra></extra>'
+            });
+        });
+        
+        const layout = {
+            scene: {
+                xaxis: { title: 'Length', range: [0, this.binSize.length] },
+                yaxis: { title: 'Width', range: [0, this.binSize.width] },
+                zaxis: { title: 'Height', range: [0, this.binSize.height] },
+                aspectmode: 'cube'
+            },
+            title: 'Warehouse Visualization',
+            showlegend: false,
+            margin: { l: 0, r: 0, b: 0, t: 30 }
+        };
+        
+        Plotly.newPlot('plot3d', traces, layout);
+        
+        // Update stats
+        document.getElementById('placedBadge').textContent = `Packed: ${packedItems.length}`;
+        document.getElementById('leftoverBadge').textContent = `Leftover: ${leftoverItems.length}`;
+        const utilization = result.utilization ? `${result.utilization.toFixed(1)}%` : 'N/A';
+        document.getElementById('utilizationBadge').textContent = `Utilization: ${utilization}`;
     }
     
     // Algorithm Endpoint Configuration Functions
@@ -501,6 +969,9 @@ class BinPackingVisualizer {
                     console.log('Initializing step controls...');
                     this.initializeStepControls();
                     
+                    console.log('Displaying items info...');
+                    this.displayItemsInfo(result.packed_items || [], result.leftover_items || []);
+                    
                     console.log('Enabling export...');
                     document.getElementById('exportResults').disabled = false;
                     
@@ -639,24 +1110,15 @@ class BinPackingVisualizer {
             '#BAE1FF', '#DDA0DD', '#98FB98', '#F0E68C'
         ];
         
-        // Limit number of items to render for performance (max 100 items)
-        const maxItems = 100;
+        // Show all packed items (no limit to match visualization only mode)
         const packedItems = this.packedResults.packed_items || [];
-        const itemsToRender = packedItems.slice(0, maxItems);
         
         // Add placed items
-        itemsToRender.forEach((item, index) => {
+        packedItems.forEach((item, index) => {
             const color = colors[index % colors.length];
             const itemMesh = this.createItemMesh(item, color);
             data.push(itemMesh);
         });
-        
-        // Show warning if items were truncated
-        if (packedItems.length > maxItems) {
-            setTimeout(() => {
-                this.showToast(`Displaying first ${maxItems} items for performance. Total: ${packedItems.length}`, 'info');
-            }, 100);
-        }
 
         const aspectRatio = this.calculateAspectRatio();
         
@@ -810,29 +1272,139 @@ class BinPackingVisualizer {
         this.initializePlot();
     }
     
-    exportResults() {
+    async exportResults() {
         if (!this.packedResults) {
             this.showToast('No packing results to export', 'warning');
             return;
         }
         
-        const exportData = {
-            ...this.packedResults,
-            export_timestamp: new Date().toISOString(),
-            bin_size: this.binSize
-        };
+        try {
+            // Send results to server for proper formatting
+            const response = await fetch('/export_results', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ...this.packedResults,
+                    bin_size: this.binSize
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (!result.success) {
+                this.showToast(`Export failed: ${result.message}`, 'danger');
+                return;
+            }
+            
+            console.log('Creating blob and download...', result.export_data);
+            const blob = new Blob([JSON.stringify(result.export_data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `packing_results_${Date.now()}.json`;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            
+            console.log('Triggering download...', a.download);
+            a.click();
+            
+            // Clean up after a short delay
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 1000);
+            
+            this.showToast('Results exported successfully!', 'success');
+            
+        } catch (error) {
+            this.showToast(`Export failed: ${error.message}`, 'danger');
+        }
+    }
+
+    exportOriginalFile() {
+        // Export original input file if available, otherwise export current items
+        if (this.originalInputData) {
+            // Export the original file data without timestamp
+            const exportData = {
+                ...this.originalInputData
+            };
+            
+            console.log('Creating original file export blob...', exportData);
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `original_input_file_${Date.now()}.json`;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            
+            console.log('Triggering original file download...', a.download);
+            a.click();
+            
+            // Clean up after a short delay
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 1000);
+            
+            this.showToast('Original input file exported successfully!', 'success');
+        } else {
+            // Fallback to current items export if no original file
+            this.exportItemsList();
+        }
+    }
+
+    async exportItemsList() {
+        if (!this.items || this.items.length === 0) {
+            this.showToast('No items to export', 'warning');
+            return;
+        }
         
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `packing_results_${Date.now()}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        this.showToast('Results exported successfully!', 'success');
+        try {
+            // Send items to server for proper formatting
+            const response = await fetch('/export_items', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    items: this.items,
+                    bin_size: this.binSize
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (!result.success) {
+                this.showToast(`Export failed: ${result.message}`, 'danger');
+                return;
+            }
+            
+            console.log('Creating items export blob...', result.export_data);
+            const blob = new Blob([JSON.stringify(result.export_data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `items_list_${Date.now()}.json`;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            
+            console.log('Triggering items download...', a.download);
+            a.click();
+            
+            // Clean up after a short delay
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 1000);
+            
+            this.showToast('Items list exported successfully!', 'success');
+            
+        } catch (error) {
+            this.showToast(`Export failed: ${error.message}`, 'danger');
+        }
     }
     
     resetAll() {
@@ -841,6 +1413,7 @@ class BinPackingVisualizer {
         this.packingSteps = [];
         this.currentStepIndex = -1;
         this.nextItemId = 1;
+        this.originalInputData = null; // Clear original input data
         this.pauseAnimation();
         
         // Reset form values
@@ -862,7 +1435,7 @@ class BinPackingVisualizer {
         this.initializePlot();
         
         document.getElementById('exportResults').disabled = true;
-        document.getElementById('detailsPanel').style.display = 'none';
+        document.getElementById('exportItemsList').disabled = this.items.length === 0;
         document.getElementById('stepControlPanel').style.display = 'none';
         
         this.showToast('All data reset to default values', 'info');
