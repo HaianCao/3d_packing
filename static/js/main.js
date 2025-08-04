@@ -25,6 +25,10 @@ class BinPackingVisualizer {
     }
     
     setupEventListeners() {
+        // Algorithm endpoint configuration
+        document.getElementById('checkEndpoint').addEventListener('click', this.checkPackingEndpoint.bind(this));
+        document.getElementById('packingEndpoint').addEventListener('input', this.onEndpointChange.bind(this));
+        
         // Warehouse controls
         document.getElementById('binLength').addEventListener('input', this.updateBinSize.bind(this));
         document.getElementById('binWidth').addEventListener('input', this.updateBinSize.bind(this));
@@ -335,9 +339,119 @@ class BinPackingVisualizer {
         }
     }
     
+    // Algorithm Endpoint Configuration Functions
+    async checkPackingEndpoint() {
+        const endpointUrl = document.getElementById('packingEndpoint').value.trim();
+        const statusDiv = document.getElementById('endpointStatus');
+        const checkBtn = document.getElementById('checkEndpoint');
+        
+        if (!endpointUrl) {
+            this.showEndpointStatus('error', 'Vui lòng nhập endpoint URL');
+            return;
+        }
+        
+        // Show loading state
+        checkBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        checkBtn.disabled = true;
+        statusDiv.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Đang kiểm tra...</div>';
+        
+        try {
+            const response = await fetch('/check_endpoint', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    endpoint_url: endpointUrl
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showEndpointStatus('success', result.message, result.endpoint_info);
+                this.showToast('Endpoint hoạt động bình thường!', 'success');
+            } else {
+                this.showEndpointStatus('error', result.message);
+                this.showToast(`Endpoint error: ${result.message}`, 'danger');
+            }
+            
+        } catch (error) {
+            console.error('Check endpoint error:', error);
+            this.showEndpointStatus('error', 'Lỗi kết nối khi kiểm tra endpoint');
+            this.showToast('Lỗi kết nối khi kiểm tra endpoint', 'danger');
+        } finally {
+            // Restore button state
+            checkBtn.innerHTML = '<i class="fas fa-check-circle"></i>';
+            checkBtn.disabled = false;
+        }
+    }
+    
+    showEndpointStatus(type, message, info = null) {
+        const statusDiv = document.getElementById('endpointStatus');
+        let iconClass, bgClass, textClass;
+        
+        switch (type) {
+            case 'success':
+                iconClass = 'fas fa-check-circle';
+                bgClass = 'bg-success';
+                textClass = 'text-success';
+                break;
+            case 'error':
+                iconClass = 'fas fa-exclamation-triangle';
+                bgClass = 'bg-danger';
+                textClass = 'text-danger';
+                break;
+            case 'warning':
+                iconClass = 'fas fa-exclamation-circle';
+                bgClass = 'bg-warning';
+                textClass = 'text-warning';
+                break;
+            default:
+                iconClass = 'fas fa-info-circle';
+                bgClass = 'bg-info';
+                textClass = 'text-info';
+        }
+        
+        let html = `
+            <div class="alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'warning'} alert-dismissible fade show p-2 mt-2" role="alert">
+                <i class="${iconClass} me-1"></i>
+                <small>${message}</small>
+        `;
+        
+        if (info) {
+            html += `
+                <br><small class="text-muted">
+                    Service: ${info.service || 'Unknown'} | 
+                    Version: ${info.version || 'Unknown'}
+                </small>
+            `;
+        }
+        
+        html += `
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        
+        statusDiv.innerHTML = html;
+    }
+    
+    onEndpointChange() {
+        // Clear status when endpoint URL changes
+        document.getElementById('endpointStatus').innerHTML = '';
+    }
+    
     async runPacking() {
         if (this.items.length === 0) {
             this.showToast('Please add items before running the packing algorithm', 'warning');
+            return;
+        }
+        
+        // Get endpoint configuration
+        const packingEndpoint = document.getElementById('packingEndpoint').value.trim();
+        
+        if (!packingEndpoint) {
+            this.showToast('Vui lòng cấu hình endpoint thuật toán packing trước', 'warning');
             return;
         }
         
@@ -346,16 +460,21 @@ class BinPackingVisualizer {
         
         try {
             console.log('Starting packing request...');
+            const requestData = {
+                packing_endpoint: packingEndpoint,
+                bin_size: this.binSize,
+                items: this.items,
+                algorithm_steps: true
+            };
+            
+            console.log('Request data:', requestData);
+            
             const response = await fetch('/pack', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    bin_size: this.binSize,
-                    items: this.items,
-                    algorithm_steps: true
-                })
+                body: JSON.stringify(requestData)
             });
             
             console.log('Response received, parsing JSON...');
@@ -621,10 +740,12 @@ class BinPackingVisualizer {
             hovertemplate: `
                 <b>Item #${item.id}</b><br>
                 <b>Request ID:</b> ${item.request_id || item.id}<br>
+                <b>Pack Order:</b> ${item.pack_order || 'N/A'}<br>
                 <b>Position:</b> (${item.x}, ${item.y}, ${item.z})<br>
-                <b>Length:</b> ${item.length}<br>
-                <b>Width:</b> ${item.width}<br>
-                <b>Height:</b> ${item.height}<br>
+                <b>Size (rotated):</b> ${item.length}×${item.width}×${item.height}<br>
+                ${item.original_length ? `<b>Original Size:</b> ${item.original_length}×${item.original_width}×${item.original_height}<br>` : ''}
+                ${item.rotation_id !== undefined ? `<b>Rotation ID:</b> ${item.rotation_id}<br>` : ''}
+                ${item.position_index ? `<b>Instance:</b> ${item.position_index}/${item.total_positions}<br>` : ''}
                 <extra></extra>
             `,
             showscale: false,
@@ -642,6 +763,9 @@ class BinPackingVisualizer {
                     <h6 class="text-primary-bright">Item Information</h6>
                     <p><strong>ID:</strong> ${item.id}</p>
                     <p><strong>Request ID:</strong> ${item.request_id}</p>
+                    ${item.pack_order ? `<p><strong>Pack Order:</strong> #${item.pack_order}</p>` : ''}
+                    ${item.position_index ? `<p><strong>Instance:</strong> ${item.position_index} of ${item.total_positions}</p>` : ''}
+                    ${item.rotation_id !== undefined ? `<p><strong>Rotation ID:</strong> ${item.rotation_id}</p>` : ''}
                 </div>
                 <div class="col-md-6">
                     <h6 class="text-primary-bright">Position</h6>
@@ -651,7 +775,8 @@ class BinPackingVisualizer {
                 </div>
                 <div class="col-12">
                     <h6 class="text-primary-bright">Dimensions</h6>
-                    <p><strong>Length:</strong> ${item.length} | <strong>Width:</strong> ${item.width} | <strong>Height:</strong> ${item.height}</p>
+                    <p><strong>Rotated Size:</strong> ${item.length} × ${item.width} × ${item.height}</p>
+                    ${item.original_length ? `<p><strong>Original Size:</strong> ${item.original_length} × ${item.original_width} × ${item.original_height}</p>` : ''}
                     <p><strong>Volume:</strong> ${item.length * item.width * item.height} cubic units</p>
                 </div>
             </div>
@@ -958,7 +1083,7 @@ class BinPackingVisualizer {
         } else if (this.currentStepIndex < this.packingSteps.length) {
             const step = this.packingSteps[this.currentStepIndex];
             document.getElementById('stepDescription').textContent = 
-                `Placing Item #${step.item_id} at (${step.position.x}, ${step.position.y}, ${step.position.z})`;
+                step.description || `Placing Item #${step.item_id} (Order: ${step.step}) at (${step.position.x}, ${step.position.y}, ${step.position.z})`;
         }
         
         // Update button states
@@ -980,12 +1105,14 @@ class BinPackingVisualizer {
         ];
         
         // Show items up to the current step
-        if (stepIndex >= 0 && stepIndex < this.packingSteps.length) {
-            const step = this.packingSteps[stepIndex];
-            const itemsToShow = step.packed_items || [];
+        if (stepIndex >= 0 && this.packedResults && this.packedResults.packed_items) {
+            // Lấy các items đã pack đến step hiện tại (dựa trên pack_order)
+            const itemsToShow = this.packedResults.packed_items.filter(item => 
+                item.pack_order && item.pack_order <= stepIndex + 1
+            );
             
             itemsToShow.forEach((item, index) => {
-                const color = colors[index % colors.length];
+                const color = colors[item.pack_order % colors.length];
                 const itemMesh = this.createItemMesh(item, color);
                 data.push(itemMesh);
             });

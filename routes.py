@@ -1,17 +1,122 @@
 from flask import render_template, request, jsonify, flash
 from app import app
-from local_search_algorithm import LocalSearchPackingAlgorithm
 import json
 import logging
+import requests
+from urllib.parse import urlparse
+from numba import njit
+
+@njit
+def get_rotation_by_id(l0, w0, h0, rotation_id, lock_axis):
+    """
+    Trả về (l, w, h) đã xoay tương ứng với rotation_id.
+
+    Parameters:
+    - l0, w0, h0: Kích thước gốc
+    - rotation_id: ID phép xoay
+    - lock_axis: True nếu chỉ xoay đáy (l, w), False nếu xoay cả 3 trục
+
+    Returns:
+    - (l, w, h): kích thước sau khi xoay
+    """
+    if lock_axis:
+        if rotation_id == 0:
+            return l0, w0, h0
+        elif rotation_id == 1:
+            return w0, l0, h0
+        else:
+            return -1, -1, -1  # rotation_id không hợp lệ trong lock_axis
+    else:
+        if rotation_id == 0:
+            return w0, l0, h0
+        elif rotation_id == 1:
+            return w0, h0, l0
+        elif rotation_id == 2:
+            return l0, w0, h0
+        elif rotation_id == 3:
+            return l0, h0, w0
+        elif rotation_id == 4:
+            return h0, w0, l0
+        elif rotation_id == 5:
+            return h0, l0, w0
+        else:
+            return -1, -1, -1  # rotation_id vượt quá 5
 
 @app.route('/')
 def index():
     """Main page with 3D visualization interface"""
     return render_template('index.html')
 
+@app.route('/check_endpoint', methods=['POST'])
+def check_packing_endpoint():
+    """Kiểm tra endpoint thuật toán packing có hoạt động không"""
+    try:
+        data = request.get_json()
+        endpoint_url = data.get('endpoint_url', '')
+        
+        if not endpoint_url:
+            return jsonify({
+                'success': False, 
+                'message': 'Vui lòng nhập endpoint URL'
+            }), 400
+        
+        # Validate URL format
+        try:
+            parsed = urlparse(endpoint_url)
+            if not all([parsed.scheme, parsed.netloc]):
+                return jsonify({
+                    'success': False,
+                    'message': 'URL không hợp lệ. Vui lòng nhập URL đầy đủ (ví dụ: http://localhost:3001/pack)'
+                }), 400
+        except Exception:
+            return jsonify({
+                'success': False,
+                'message': 'URL không hợp lệ'
+            }), 400
+        
+        # Kiểm tra endpoint có phản hồi không
+        try:
+            # Thử gọi với timeout ngắn
+            response = requests.get(endpoint_url.replace('/pack', '/health'), timeout=5)
+            if response.status_code == 200:
+                return jsonify({
+                    'success': True,
+                    'message': 'Endpoint hoạt động bình thường',
+                    'endpoint_info': response.json() if response.headers.get('content-type', '').startswith('application/json') else None
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': f'Endpoint trả về status code: {response.status_code}'
+                }), 400
+                
+        except requests.exceptions.ConnectionError:
+            return jsonify({
+                'success': False,
+                'message': 'Không thể kết nối tới endpoint. Kiểm tra URL và server có đang chạy không.'
+            }), 400
+        except requests.exceptions.Timeout:
+            return jsonify({
+                'success': False,
+                'message': 'Timeout khi kết nối tới endpoint'
+            }), 400
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'message': f'Lỗi khi kiểm tra endpoint: {str(e)}'
+            }), 400
+            
+    except Exception as e:
+        logging.error(f"Check endpoint error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Lỗi server: {str(e)}'
+        }), 500
+
+
 @app.route('/pack', methods=['POST'])
 def pack_items():
-    """API endpoint for packing items"""
+    """API endpoint for packing items - sử dụng external endpoint"""
     try:
         import time
         start_time = time.time()
@@ -21,6 +126,14 @@ def pack_items():
         
         if not data:
             return jsonify({'success': False, 'message': 'No data provided'}), 400
+        
+        # Lấy endpoint URL từ request
+        packing_endpoint = data.get('packing_endpoint', '')
+        if not packing_endpoint:
+            return jsonify({
+                'success': False, 
+                'message': 'Vui lòng cung cấp packing_endpoint URL'
+            }), 400
         
         # Get bin size
         bin_size = data.get('bin_size', {})
@@ -32,58 +145,242 @@ def pack_items():
         items = data.get('items', [])
         
         logging.info(f"Received {len(items)} items to pack in bin {bin_length}x{bin_width}x{bin_height}")
+        logging.info(f"Using external endpoint: {packing_endpoint}")
         
         if not items:
             return jsonify({'success': False, 'message': 'No items to pack'}), 400
         
-        # Validate items - support both old and new formats
-        for i, item in enumerate(items):
-            # Check for new format (L, W, H) or old format (length, width, height)
-            if 'L' in item and 'W' in item and 'H' in item:
-                required_fields = ['L', 'W', 'H', 'id']
+        # Chuẩn bị data để gửi tới external endpoint
+        # Chuyển đổi format từ webapp sang format của packing API
+        
+        # Tạo default parameters dựa trên số items
+        num_unique_items = len(set(item.get('id', 0) for item in items))
+        
+        # Default stack rule - tất cả items có thể stack trên nhau
+        default_stack_rule = []
+        for i in range(num_unique_items):
+            row = [3] * num_unique_items  # 3 = unlimited stacking
+            default_stack_rule.append(row)
+        
+        # Default lifo order - không có ràng buộc LIFO
+        default_lifo_order = [0] * num_unique_items
+        
+        packing_request = {
+            "items": [],
+            "bin_size": {
+                "L": bin_length,
+                "W": bin_width, 
+                "H": bin_height
+            },
+            "parameters": {
+                "stack_rule": data.get('stack_rule', default_stack_rule),
+                "lifo_order": data.get('lifo_order', default_lifo_order)
+            },
+            "options": {
+                "use_local_search": False,
+                "weights": data.get('weights', [5, 1, 1, 5, 5, 1, 1, 1, 3, -1000, -1, -1, -1000])
+            }
+        }
+        
+        # Chuyển đổi items sang format API
+        for item in items:
+            # Kiểm tra format - ưu tiên format cũ (length/width/height) vì đó là format từ webapp
+            if 'length' in item and 'width' in item and 'height' in item:
+                # Format từ webapp với length/width/height
+                packing_request["items"].append({
+                    "id": item.get('id', 0),
+                    "request_id": item.get('request_id', item.get('id', 0)),
+                    "L": float(item['length']),
+                    "W": float(item['width']),
+                    "H": float(item['height']),
+                    "num_axis": item.get('number_axis', item.get('num_axis', 2)),
+                    "quantity": 1  # Mỗi item đã được expand sẵn
+                })
+            elif 'L' in item and 'W' in item and 'H' in item:
+                # Format JSON upload với L/W/H
+                packing_request["items"].append({
+                    "id": item.get('id', 0),
+                    "request_id": item.get('request_id', item.get('id', 0)),
+                    "L": float(item['L']),
+                    "W": float(item['W']),
+                    "H": float(item['H']),
+                    "num_axis": item.get('num_axis', 2),
+                    "quantity": item.get('quantity', 1)
+                })
             else:
-                required_fields = ['length', 'width', 'height', 'id']
+                logging.error(f"Invalid item format: {item}")
+                continue
+        
+        # Validate dữ liệu trước khi gửi
+        if not packing_request["items"]:
+            return jsonify({
+                'success': False, 
+                'message': 'Không có items hợp lệ để pack'
+            }), 400
+        
+        # Ensure stack_rule is properly sized
+        actual_num_items = len(packing_request["items"])
+        if len(packing_request["parameters"]["stack_rule"]) != actual_num_items:
+            # Recreate stack_rule with correct size
+            packing_request["parameters"]["stack_rule"] = [[3] * actual_num_items for _ in range(actual_num_items)]
+        
+        if len(packing_request["parameters"]["lifo_order"]) != actual_num_items:
+            # Recreate lifo_order with correct size  
+            packing_request["parameters"]["lifo_order"] = [0] * actual_num_items
+        
+        logging.info(f"Final item count: {len(packing_request['items'])}")
+        logging.info(f"Stack rule size: {len(packing_request['parameters']['stack_rule'])}x{len(packing_request['parameters']['stack_rule'][0]) if packing_request['parameters']['stack_rule'] else 0}")
+        logging.info(f"LIFO order size: {len(packing_request['parameters']['lifo_order'])}")
+        
+        # Gọi external packing endpoint
+        try:
+            logging.info("Calling external packing endpoint...")
+            logging.info(f"Request data: {json.dumps(packing_request, indent=2)}")
+            
+            response = requests.post(
+                packing_endpoint,
+                json=packing_request,
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                end_time = time.time()
                 
-            for field in required_fields:
-                if field not in item:
-                    return jsonify({
-                        'success': False, 
-                        'message': f'Item {i} missing required field: {field}'
-                    }), 400
+                # Chuyển đổi kết quả về format webapp
+                packed_items = []
+                leftover_items = []
                 
+                # Xử lý packed items - đọc theo thứ tự trong output để có pack_order
+                pack_order = 1  # Thứ tự pack bắt đầu từ 1
+                if 'packed_items' in result:
+                    for item_group in result['packed_items']:
+                        positions = item_group.get('positions', [])
+                        rotation_ids = item_group.get('rotation_id', [])
+                        
+                        # Mỗi position tương ứng với 1 item đã pack
+                        for i, pos in enumerate(positions):
+                            # Lấy rotation_id cho position này
+                            rotation_id = rotation_ids[i] if i < len(rotation_ids) else 0
+                            
+                            # Tính kích thước thực tế sau khi xoay
+                            l0, w0, h0 = item_group['L'], item_group['W'], item_group['H']
+                            num_axis = item_group.get('num_axis', 2)
+                            lock_axis = (num_axis == 2)
+                            
+                            # Áp dụng rotation
+                            actual_l, actual_w, actual_h = get_rotation_by_id(l0, w0, h0, rotation_id, lock_axis)
+                            
+                            packed_items.append({
+                                'id': item_group['id'],
+                                'request_id': item_group.get('request_id', item_group['id']),
+                                'length': actual_l,  # Kích thước sau khi xoay
+                                'width': actual_w,   # Kích thước sau khi xoay
+                                'height': actual_h,  # Kích thước sau khi xoay
+                                'original_length': l0,  # Kích thước gốc
+                                'original_width': w0,   # Kích thước gốc
+                                'original_height': h0,  # Kích thước gốc
+                                'rotation_id': rotation_id,
+                                'x': pos['x'],
+                                'y': pos['y'],
+                                'z': pos['z'],
+                                'pack_order': pack_order,  # Thứ tự pack theo output
+                                'position_index': i + 1,  # Vị trí thứ i của item này
+                                'total_positions': len(positions),  # Tổng số vị trí của item này
+                                'item_type_id': item_group['id']  # ID loại item
+                            })
+                            pack_order += 1
+                
+                # Xử lý leftover items
+                if 'left_over_items' in result:
+                    for item_group in result['left_over_items']:
+                        for _ in range(item_group.get('quantity', 1)):
+                            leftover_items.append({
+                                'id': item_group['id'],
+                                'request_id': item_group.get('request_id', item_group['id']),
+                                'length': item_group['L'],
+                                'width': item_group['W'],
+                                'height': item_group['H']
+                            })
+                
+                # Tính utilization
+                total_items = len(packed_items) + len(leftover_items)
+                utilization = len(packed_items) / total_items if total_items > 0 else 0
+                
+                # Tạo packing steps từ packed_items theo thứ tự pack_order
+                packing_steps = []
+                for item in sorted(packed_items, key=lambda x: x['pack_order']):
+                    rotation_info = f" (Rotation: {item['rotation_id']})" if 'rotation_id' in item else ""
+                    size_info = f"{item['length']}×{item['width']}×{item['height']}"
+                    orig_size_info = ""
+                    if 'original_length' in item:
+                        orig_size_info = f" [Original: {item['original_length']}×{item['original_width']}×{item['original_height']}]"
+                    
+                    packing_steps.append({
+                        'item_id': item['id'],
+                        'position': {
+                            'x': item['x'],
+                            'y': item['y'], 
+                            'z': item['z']
+                        },
+                        'dimensions': {
+                            'length': item['length'],
+                            'width': item['width'],
+                            'height': item['height']
+                        },
+                        'original_dimensions': {
+                            'length': item.get('original_length', item['length']),
+                            'width': item.get('original_width', item['width']),
+                            'height': item.get('original_height', item['height'])
+                        },
+                        'rotation_id': item.get('rotation_id', 0),
+                        'step': item['pack_order'],
+                        'description': f"Packed item {item['id']} (#{item['pack_order']}) at ({item['x']}, {item['y']}, {item['z']}) - Size: {size_info}{orig_size_info}{rotation_info}"
+                    })
+
+                logging.info(f"Packing completed in {end_time - start_time:.2f} seconds")
+                logging.info(f"Packed: {len(packed_items)}, Leftover: {len(leftover_items)}, Utilization: {utilization:.2%}")
+
+                return jsonify({
+                    'success': True,
+                    'packed_items': packed_items,
+                    'leftover_items': leftover_items,
+                    'bin_size': {
+                        'length': bin_length,
+                        'width': bin_width,
+                        'height': bin_height
+                    },
+                    'utilization': utilization,
+                    'packing_time': end_time - start_time,
+                    'external_result': result.get('metadata', {}),
+                    'packing_steps': packing_steps  # Thêm packing steps cho step-by-step visualization
+                })
+                
+            else:
+                error_msg = f"External endpoint returned status {response.status_code}"
                 try:
-                    int(item[field])
-                except (ValueError, TypeError):
-                    return jsonify({
-                        'success': False,
-                        'message': f'Item {i} field {field} must be a number'
-                    }), 400
-        
-        # Run packing algorithm
-        logging.info("Starting packing algorithm...")
-        packing = LocalSearchPackingAlgorithm((bin_length, bin_width, bin_height))
-        
-        # Get algorithm steps for visualization
-        algorithm_steps = data.get('algorithm_steps', False)
-        
-        # Detect format and use appropriate packing method
-        if items and 'L' in items[0]:  # New format with L/W/H
-            result = packing.pack_json_format(items, algorithm_steps)
-        else:  # Original format with length/width/height
-            result = packing.pack(items, algorithm_steps)
-        
-        end_time = time.time()
-        logging.info(f"Packing completed in {end_time - start_time:.2f} seconds")
-        
-        return jsonify({
-            'success': True,
-            'packed_items': result['packed_items'],
-            'leftover_items': result['leftover_items'],
-            'bin_size': result['bin_size'],
-            'utilization': result['utilization'],
-            'packing_time': result['packing_time'],
-            'packing_steps': result.get('packing_steps', [])
-        })
+                    error_detail = response.json()
+                    error_msg += f": {error_detail.get('message', error_detail.get('error', 'Unknown error'))}"
+                except:
+                    error_msg += f": {response.text}"
+                    
+                logging.error(f"External endpoint error: {error_msg}")
+                return jsonify({
+                    'success': False,
+                    'message': error_msg
+                }), 400
+                
+        except requests.exceptions.ConnectionError:
+            return jsonify({
+                'success': False,
+                'message': 'Không thể kết nối tới packing endpoint. Kiểm tra URL và server có đang chạy không.'
+            }), 400
+        except Exception as e:
+            logging.error(f"External endpoint call error: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Lỗi khi gọi external endpoint: {str(e)}'
+            }), 500
         
     except Exception as e:
         logging.error(f"Packing error: {str(e)}")
