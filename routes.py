@@ -48,25 +48,29 @@ def index():
     return render_template('index.html')
 
 @app.route('/check_endpoint', methods=['POST'])
-def check_packing_endpoint():
-    """Kiểm tra endpoint thuật toán packing có hoạt động không"""
+def check_endpoint():
+    """Kiểm tra base URL có hoạt động không"""
     try:
         data = request.get_json()
-        endpoint_url = data.get('endpoint_url', '')
+        base_url = data.get('base_url', '').strip()
         
-        if not endpoint_url:
+        if not base_url:
             return jsonify({
                 'success': False, 
-                'message': 'Vui lòng nhập endpoint URL'
+                'message': 'Vui lòng nhập base URL'
             }), 400
+        
+        # Chuẩn hóa base URL
+        if not base_url.startswith('http'):
+            base_url = f"http://{base_url}"
         
         # Validate URL format
         try:
-            parsed = urlparse(endpoint_url)
+            parsed = urlparse(base_url)
             if not all([parsed.scheme, parsed.netloc]):
                 return jsonify({
                     'success': False,
-                    'message': 'URL không hợp lệ. Vui lòng nhập URL đầy đủ (ví dụ: http://localhost:3001/pack)'
+                    'message': 'URL không hợp lệ. Vui lòng nhập base URL (ví dụ: localhost:3000)'
                 }), 400
         except Exception:
             return jsonify({
@@ -76,24 +80,42 @@ def check_packing_endpoint():
         
         # Kiểm tra endpoint có phản hồi không
         try:
-            # Thử gọi với timeout ngắn
-            response = requests.get(endpoint_url.replace('/pack', '/health'), timeout=5)
+            # Thử gọi với timeout ngắn - kiểm tra /health hoặc root
+            health_url = f"{base_url}/health"
+            response = requests.get(health_url, timeout=5)
             if response.status_code == 200:
                 return jsonify({
                     'success': True,
-                    'message': 'Endpoint hoạt động bình thường',
-                    'endpoint_info': response.json() if response.headers.get('content-type', '').startswith('application/json') else None
+                    'message': f'Base URL {base_url} hoạt động bình thường',
+                    'endpoint_info': {
+                        'base_url': base_url,
+                        'pack_endpoint': f"{base_url}/pack",
+                        'training_endpoint': f"{base_url}/training"
+                    }
                 })
             else:
-                return jsonify({
-                    'success': False,
-                    'message': f'Endpoint trả về status code: {response.status_code}'
-                }), 400
+                # Thử kiểm tra root endpoint
+                root_response = requests.get(base_url, timeout=5)
+                if root_response.status_code == 200:
+                    return jsonify({
+                        'success': True,
+                        'message': f'Base URL {base_url} hoạt động bình thường (root endpoint)',
+                        'endpoint_info': {
+                            'base_url': base_url,
+                            'pack_endpoint': f"{base_url}/pack",
+                            'training_endpoint': f"{base_url}/training"
+                        }
+                    })
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': f'Base URL trả về status code: {response.status_code}'
+                    }), 400
                 
         except requests.exceptions.ConnectionError:
             return jsonify({
                 'success': False,
-                'message': 'Không thể kết nối tới endpoint. Kiểm tra URL và server có đang chạy không.'
+                'message': 'Không thể kết nối tới base URL. Kiểm tra URL và server có đang chạy không.'
             }), 400
         except requests.exceptions.Timeout:
             return jsonify({
@@ -127,13 +149,22 @@ def pack_items():
         if not data:
             return jsonify({'success': False, 'message': 'No data provided'}), 400
         
-        # Lấy endpoint URL từ request
-        packing_endpoint = data.get('packing_endpoint', '')
-        if not packing_endpoint:
+        # Lấy base URL và endpoint từ request
+        base_url = data.get('base_url', '').strip()
+        endpoint = data.get('endpoint', '/pack')
+        
+        if not base_url:
             return jsonify({
                 'success': False, 
-                'message': 'Vui lòng cung cấp packing_endpoint URL'
+                'message': 'Vui lòng cung cấp base_url'
             }), 400
+        
+        # Chuẩn hóa base URL
+        if not base_url.startswith('http'):
+            base_url = f"http://{base_url}"
+        
+        # Tạo full URL
+        packing_endpoint = f"{base_url}{endpoint}"
         
         # Get bin size
         bin_size = data.get('bin_size', {})
@@ -154,16 +185,33 @@ def pack_items():
         # Chuyển đổi format từ webapp sang format của packing API
         
         # Tạo default parameters dựa trên số items
-        num_unique_items = len(set(item.get('id', 0) for item in items))
+        num_items = len(items)
         
-        # Default stack rule - tất cả items có thể stack trên nhau
-        default_stack_rule = []
-        for i in range(num_unique_items):
-            row = [3] * num_unique_items  # 3 = unlimited stacking
-            default_stack_rule.append(row)
+        # Default stack rule - array với length = số items
+        default_stack_rule = [100] * num_items  # 100 = unlimited stacking
         
-        # Default lifo order - không có ràng buộc LIFO
-        default_lifo_order = [0] * num_unique_items
+        # Default lifo order - array với length = số items
+        default_lifo_order = [0] * num_items
+        
+        # Get params from request (includes weights)
+        params = data.get('params', {})
+        weights = params.get('weights', {})
+        
+        # Default weights if not provided
+        default_weights = {
+            "W_lifo": 10.0,
+            "W_sim_l": -1.0,
+            "W_sim_w": -1.0,
+            "W_sim_h": 0.0,
+            "W_leftover_l_ratio": -5.0,
+            "W_leftover_w_ratio": -5.0,
+            "W_packable_l": -0.5,
+            "W_packable_w": -0.5
+        }
+        
+        # Use provided weights or default
+        if not weights:
+            weights = default_weights
         
         packing_request = {
             "items": [],
@@ -174,11 +222,8 @@ def pack_items():
             },
             "parameters": {
                 "stack_rule": data.get('stack_rule', default_stack_rule),
-                "lifo_order": data.get('lifo_order', default_lifo_order)
-            },
-            "options": {
-                "use_local_search": False,
-                "weights": data.get('weights', [5, 1, 1, 5, 5, 1, 1, 1, 3, -1000, -1, -1, -1000])
+                "lifo_order": data.get('lifo_order', default_lifo_order),
+                "weights": weights
             }
         }
         
@@ -218,19 +263,37 @@ def pack_items():
                 'message': 'Không có items hợp lệ để pack'
             }), 400
         
-        # Ensure stack_rule is properly sized
+        # Ensure stack_rule is properly sized (array format, not matrix)
         actual_num_items = len(packing_request["items"])
         if len(packing_request["parameters"]["stack_rule"]) != actual_num_items:
-            # Recreate stack_rule with correct size
-            packing_request["parameters"]["stack_rule"] = [[3] * actual_num_items for _ in range(actual_num_items)]
+            # Recreate stack_rule with correct size - array format like JSON sample
+            packing_request["parameters"]["stack_rule"] = [100] * actual_num_items
         
         if len(packing_request["parameters"]["lifo_order"]) != actual_num_items:
             # Recreate lifo_order with correct size  
             packing_request["parameters"]["lifo_order"] = [0] * actual_num_items
         
+        # Log input data to file before sending to backend
+        import json
+        import datetime
+        
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_filename = f"input_log_{timestamp}.json"
+        
+        try:
+            with open(log_filename, 'w', encoding='utf-8') as f:
+                json.dump(packing_request, f, indent=2, ensure_ascii=False)
+            logging.info(f"Saved input data to {log_filename}")
+        except Exception as e:
+            logging.warning(f"Failed to save input log: {e}")
+        
         logging.info(f"Final item count: {len(packing_request['items'])}")
-        logging.info(f"Stack rule size: {len(packing_request['parameters']['stack_rule'])}x{len(packing_request['parameters']['stack_rule'][0]) if packing_request['parameters']['stack_rule'] else 0}")
-        logging.info(f"LIFO order size: {len(packing_request['parameters']['lifo_order'])}")
+        logging.info(f"Stack rule length: {len(packing_request['parameters']['stack_rule'])}")
+        logging.info(f"LIFO order length: {len(packing_request['parameters']['lifo_order'])}")
+        logging.info(f"Weights: {packing_request['parameters']['weights']}")
+        
+        # Log the complete request for debugging
+        logging.debug(f"Complete packing request: {json.dumps(packing_request, indent=2)}")
         
         # Gọi external packing endpoint
         try:
@@ -447,7 +510,9 @@ def validate_json():
                         'request_id': item.get('request_id', item['id']),
                         'length': item['L'],
                         'width': item['W'],
-                        'height': item['H']
+                        'height': item['H'],
+                        'num_axis': item.get('num_axis', 2),
+                        'number_axis': item.get('num_axis', 2)  # For backward compatibility
                     })
             elif 'length' in item and 'width' in item and 'height' in item:
                 # Old format
@@ -646,9 +711,268 @@ def export_results():
             'message': f'Export results error: {str(e)}'
         }), 500
 
+
+@app.route('/training', methods=['POST'])
+def train_model():
+    """API endpoint for training algorithm - sử dụng external endpoint"""
+    try:
+        import time
+        start_time = time.time()
+        logging.info("Starting training request...")
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'}), 400
+        
+        # Lấy base URL và endpoint từ request
+        base_url = data.get('base_url', '').strip()
+        endpoint = data.get('endpoint', '/training')
+        
+        if not base_url:
+            return jsonify({
+                'success': False, 
+                'message': 'Vui lòng cung cấp base_url'
+            }), 400
+        
+        # Chuẩn hóa base URL
+        if not base_url.startswith('http'):
+            base_url = f"http://{base_url}"
+        
+        # Tạo full URL
+        training_endpoint = f"{base_url}{endpoint}"
+        
+        # Get bin size
+        bin_size = data.get('bin_size', {})
+        bin_length = int(bin_size.get('length', 10))
+        bin_width = int(bin_size.get('width', 10))
+        bin_height = int(bin_size.get('height', 10))
+        
+        # Get items
+        items = data.get('items', [])
+        
+        logging.info(f"Received {len(items)} items for training in bin {bin_length}x{bin_width}x{bin_height}")
+        logging.info(f"Using external training endpoint: {training_endpoint}")
+        
+        if not items:
+            return jsonify({'success': False, 'message': 'No items to train with'}), 400
+        
+        # Chuẩn bị data để gửi tới external training endpoint
+        # Format tương tự như packing nhưng cho training
+        
+        # Tạo default parameters dựa trên số items
+        num_items = len(items)
+        
+        # Tạo default parameters
+        default_parameters = {
+            "stack_rule": [],
+            "lifo_order": []
+        }
+        
+        # Chuẩn bị request payload cho training API
+        training_payload = {
+            "bin_size": {
+                "L": bin_length,
+                "W": bin_width, 
+                "H": bin_height
+            },
+            "items": [],
+            "parameters": data.get('params', default_parameters)
+        }
+        
+        # Convert items to training API format
+        for item in items:
+            training_payload["items"].append({
+                "id": item.get("id", 1),
+                "request_id": item.get("id", 1),
+                "L": float(item.get("length", 1)),
+                "W": float(item.get("width", 1)),
+                "H": float(item.get("height", 1)),
+                "quantity": item.get("quantity", 1)
+            })
+        
+        logging.info(f"Training payload: {training_payload}")
+        
+        # Gọi external training API
+        try:
+            response = requests.post(
+                training_endpoint,
+                json=training_payload,
+                timeout=300,  # 5 phút timeout cho training
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            logging.info(f"Training API response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                error_msg = f"Training API returned status {response.status_code}"
+                try:
+                    error_detail = response.json()
+                    error_msg += f": {error_detail}"
+                except:
+                    error_msg += f": {response.text}"
+                
+                logging.error(error_msg)
+                return jsonify({
+                    'success': False,
+                    'message': error_msg
+                }), 400
+            
+            training_result = response.json()
+            logging.info(f"Training API response: {training_result}")
+            
+        except requests.exceptions.Timeout:
+            return jsonify({
+                'success': False,
+                'message': 'Training request timeout. Server có thể đang xử lý quá lâu.'
+            }), 408
+            
+        except requests.exceptions.ConnectionError:
+            return jsonify({
+                'success': False,
+                'message': 'Không thể kết nối tới training server. Kiểm tra URL và server có đang chạy không.'
+            }), 503
+        
+        except Exception as e:
+            logging.error(f"Training API call failed: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Training API call failed: {str(e)}'
+            }), 500
+        
+        # Xử lý kết quả training tương tự như packing
+        end_time = time.time()
+        training_time = end_time - start_time
+        
+        logging.info(f"Training completed in {training_time:.2f} seconds")
+        
+        # Return formatted response cho frontend
+        return jsonify({
+            'success': True,
+            'message': 'Training completed successfully',
+            'packed_items': training_result.get('packed_items', []),
+            'leftover_items': training_result.get('leftover_items', []),
+            'utilization': training_result.get('utilization', 0),
+            'training_time': training_time,
+            'algorithm_steps': training_result.get('algorithm_steps', []),
+            'training_score': training_result.get('training_score', 0.0),
+            'raw_response': training_result
+        })
+        
+    except Exception as e:
+        logging.error(f"Training error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Training error: {str(e)}'
+        }), 500
 @app.errorhandler(404)
 def not_found(error):
     return render_template('index.html'), 404
+
+@app.route('/fake_data', methods=['POST'])
+def fake_data():
+    """API endpoint for generating fake data - sử dụng external endpoint"""
+    try:
+        import time
+        start_time = time.time()
+        logging.info("Starting fake data generation request...")
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'}), 400
+        
+        # Lấy base URL và endpoint từ request
+        base_url = data.get('base_url', '').strip()
+        endpoint = data.get('endpoint', '/fake_data')
+        
+        if not base_url:
+            return jsonify({
+                'success': False, 
+                'message': 'Vui lòng cung cấp base_url'
+            }), 400
+        
+        # Chuẩn hóa base URL
+        if not base_url.startswith('http'):
+            base_url = f"http://{base_url}"
+        
+        # URL đích
+        target_url = f"{base_url}{endpoint}"
+        
+        # Chuẩn bị data để gửi đến external API
+        api_data = {
+            'num_items': data.get('num_items', 10),
+            'bin_size': data.get('bin_size', {'L': 10, 'W': 10, 'H': 10}),
+            'n_unique': data.get('n_unique', 3),
+            'include_weights': data.get('include_weights', True)
+        }
+        
+        # Thêm seed nếu có
+        if 'seed' in data and data['seed'] is not None:
+            api_data['seed'] = data['seed']
+        
+        logging.info(f"Sending fake data request to: {target_url}")
+        logging.info(f"Request data: {api_data}")
+        
+        # Gọi external API
+        response = requests.post(
+            target_url,
+            json=api_data,
+            headers={'Content-Type': 'application/json'},
+            timeout=30
+        )
+        
+        logging.info(f"External API response status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result_data = response.json()
+            
+            # Tính thời gian xử lý
+            processing_time = time.time() - start_time
+            
+            return jsonify({
+                'success': True,
+                'message': 'Fake data generated successfully',
+                'data': result_data,
+                'processing_time': round(processing_time, 2)
+            })
+        else:
+            error_message = f"External API error: {response.status_code}"
+            try:
+                error_data = response.json()
+                if 'message' in error_data:
+                    error_message = error_data['message']
+                elif 'error' in error_data:
+                    error_message = error_data['error']
+            except:
+                error_message = f"HTTP {response.status_code}: {response.text[:200]}"
+            
+            logging.error(f"External API error: {error_message}")
+            return jsonify({
+                'success': False,
+                'message': error_message
+            }), response.status_code
+            
+    except requests.exceptions.ConnectionError:
+        logging.error(f"Connection failed to {target_url}")
+        return jsonify({
+            'success': False,
+            'message': f'Không thể kết nối đến server {base_url}. Vui lòng kiểm tra base URL và đảm bảo server đang chạy.'
+        }), 503
+        
+    except requests.exceptions.Timeout:
+        logging.error(f"Timeout connecting to {target_url}")
+        return jsonify({
+            'success': False,
+            'message': 'Timeout khi gọi external API. Vui lòng thử lại.'
+        }), 504
+        
+    except Exception as e:
+        logging.error(f"Fake data generation error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Lỗi server: {str(e)}'
+        }), 500
 
 @app.errorhandler(500)
 def internal_error(error):

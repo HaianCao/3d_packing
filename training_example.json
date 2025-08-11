@@ -1,0 +1,72 @@
+{
+    "training_data": [
+        {
+            "items": [
+                {
+                    "id": 0,
+                    "request_id": 0,
+                    "L": 1830,
+                    "W": 2370,
+                    "H": 2470,
+                    "num_axis": 2,
+                    "quantity": 1
+                },
+                {
+                    "id": 1,
+                    "request_id": 1,
+                    "L": 983,
+                    "W": 375,
+                    "H": 2470,
+                    "num_axis": 2,
+                    "quantity": 2
+                }
+            ],
+            "bin_size": {
+                "L": 9590,
+                "W": 2390,
+                "H": 2570
+            }
+        },
+        {
+            "items": [
+                {
+                    "id": 0,
+                    "request_id": 0,
+                    "L": 915,
+                    "W": 915,
+                    "H": 2470,
+                    "num_axis": 2,
+                    "quantity": 1
+                },
+                {
+                    "id": 1,
+                    "request_id": 1,
+                    "L": 395,
+                    "W": 915,
+                    "H": 2470,
+                    "num_axis": 2,
+                    "quantity": 3
+                }
+            ],
+            "bin_size": {
+                "L": 9590,
+                "W": 2390,
+                "H": 2570
+            }
+        }
+    ],
+    "algorithm_weights": {
+        "W_lifo": 1.0,
+        "W_sim_l": 1.0,
+        "W_sim_w": 1.0,
+        "W_sim_h": 1.0,
+        "W_leftover_l_ratio": 1.0,
+        "W_leftover_w_ratio": 1.0,
+        "W_packable_l": 1.0,
+        "W_packable_w": 1.0
+    },
+    "training_config": {
+        "num_steps": 3,
+        "max_change": 0.3
+    }
+}

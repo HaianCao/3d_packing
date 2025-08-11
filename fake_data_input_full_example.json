@@ -1,0 +1,11 @@
+{
+    "num_items": 10,
+    "bin_size": {
+        "L": 10,
+        "W": 10,
+        "H": 10
+    },
+    "seed": 10,
+    "n_unique": 3,
+    "include_weights": true
+}
