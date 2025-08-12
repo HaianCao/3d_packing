@@ -10,4 +10,5 @@ dependencies = [
     "gunicorn>=23.0.0",
     "numpy>=2.3.2",
     "psycopg2-binary>=2.9.10",
+    "requests>=2.32.4",
 ]

@@ -17,11 +17,6 @@
 }
 
 /* Global Styles */
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #E8F5E8, #F0F8F0);
-    min-height: 100vh;
-}
 
 html, body {
     height: 100%;
@@ -37,7 +32,6 @@ html, body {
     background: linear-gradient(180deg, #F8F9FA, #E8F5E8) !important;
     border-right: 2px solid var(--primary-bright);
     max-height: calc(100vh - 76px);
-    overflow-y: auto;
 }
 
 /* Card Styles */
@@ -72,6 +66,49 @@ html, body {
 
 .bg-purple-bright {
     background: linear-gradient(135deg, #9C27B0, #AB47BC) !important;
+}
+
+/* Separated Action Button Section */
+.control-panel-action-section {
+    flex-shrink: 0;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-top: 2px solid var(--primary-bright);
+    box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.1);
+    margin-top: auto;
+}
+
+.control-panel-action-section .btn {
+    border-radius: 50px !important;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.15);
+    background: var(--gradient-primary) !important;
+    border: none;
+}
+
+.control-panel-action-section .btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 35px rgba(76, 175, 80, 0.4) !important;
+}
+
+.control-panel-action-section .btn:active {
+    transform: translateY(-1px);
+}
+
+/* Global Body Styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #E8F5E8, #F0F8F0);
+    min-height: 100vh;
+}
+
+/* Override for the fixed action bar spacing */
+.fixed-action-bar ~ * {
+    margin-bottom: 90px;
 }
 
 .bg-warning-bright {

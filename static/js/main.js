@@ -347,6 +347,13 @@ class BinPackingVisualizer {
             this.updateItemsList();
             this.updateWarehouseDisplay();
             
+            // Display weights if available
+            if (data.parameters && data.parameters.weights) {
+                this.displayWeights(data.parameters.weights);
+            } else {
+                this.hideWeights();
+            }
+            
             this.nextItemId = Math.max(...this.items.map(item => item.id), 0) + 1;
             this.updateItemId();
             
@@ -562,41 +569,57 @@ class BinPackingVisualizer {
                             <div class="bg-light p-3 rounded">
                                 <pre><code>{
   "bin_size": {
-    "length": 1000,
-    "width": 800,
-    "height": 600
+    "length": 5,
+    "width": 3,
+    "height": 3
   },
   "packed_items": [
     {
-      "id": 1,
-      "length": 300,
-      "width": 200,
-      "height": 150,
-      "x": 0,
+      "id": 0,
+      "length": 1,
+      "width": 2,
+      "height": 1,
+      "x": 2,
       "y": 0,
-      "z": 0
-    },
-    {
-      "id": 2,
-      "length": 250,
-      "width": 180,
-      "height": 120,
-      "x": 300,
-      "y": 0,
-      "z": 0
+      "z": 0,
+      "item_type_id": 0,
+      "request_id": 0,
+      "pack_order": 1,
+      "position_index": 1,
+      "rotation_id": 1,
+      "total_positions": 1,
+      "original_length": 2,
+      "original_width": 1,
+      "original_height": 1
     }
-  ]
+  ],
+  "leftover_items": [
+    {
+      "height": 1870,
+      "id": 84,
+      "length": 900,
+      "quantity": 1,
+      "width": 680
+    }
+  ],
+  "packing_time": 0.55,
+  "utilization": 44.44
 }</code></pre>
                             </div>
                             <div class="mt-3">
                                 <h6>Format Details:</h6>
                                 <ul>
                                     <li><strong>bin_size:</strong> Warehouse dimensions (length, width, height)</li>
-                                    <li><strong>packed_items:</strong> Array of packed items with coordinates</li>
+                                    <li><strong>packed_items:</strong> Array of successfully packed items with coordinates and rotation info</li>
+                                    <li><strong>leftover_items:</strong> Array of items that couldn't be packed with original dimensions and quantity</li>
+                                    <li><strong>packing_time:</strong> Processing time in seconds (float)</li>
+                                    <li><strong>utilization:</strong> Space utilization percentage (float)</li>
                                     <li><strong>id:</strong> Unique identifier for each item</li>
-                                    <li><strong>length, width, height:</strong> Item dimensions</li>
-                                    <li><strong>x, y, z:</strong> Item position coordinates in the warehouse</li>
-                                    <li><strong>Note:</strong> Only packed items are visualized, leftover items are ignored</li>
+                                    <li><strong>length, width, height:</strong> Item dimensions after rotation</li>
+                                    <li><strong>original_length, original_width, original_height:</strong> Original item dimensions before rotation</li>
+                                    <li><strong>x, y, z:</strong> Item position coordinates in the warehouse (only for packed items)</li>
+                                    <li><strong>rotation_id:</strong> Applied rotation (0=no rotation, 1=90° rotation, etc.)</li>
+                                    <li><strong>pack_order:</strong> Order in which items were packed</li>
                                 </ul>
                             </div>
                         </div>
@@ -803,7 +826,7 @@ class BinPackingVisualizer {
         // Update stats
         document.getElementById('placedBadge').textContent = `Packed: ${packedItems.length}`;
         document.getElementById('leftoverBadge').textContent = `Leftover: ${leftoverItems.length}`;
-        const utilization = result.utilization ? `${result.utilization.toFixed(1)}%` : 'N/A';
+        const utilization = result.utilization ? `${(result.utilization * 100).toFixed(1)}%` : 'N/A';
         document.getElementById('utilizationBadge').textContent = `Utilization: ${utilization}`;
     }
     
@@ -934,6 +957,15 @@ class BinPackingVisualizer {
                 items: this.items,
                 algorithm_steps: true
             };
+
+            // Add current weights if available
+            const currentWeights = this.getCurrentWeights();
+            if (currentWeights) {
+                requestData.parameters = {
+                    weights: currentWeights
+                };
+                console.log('Sending weights with request:', currentWeights);
+            }
             
             console.log('Request data:', requestData);
             
@@ -1256,7 +1288,7 @@ class BinPackingVisualizer {
         if (this.packedResults) {
             const placed = (this.packedResults.packed_items || []).length;
             const leftover = (this.packedResults.leftover_items || []).length;
-            const utilization = Math.round(this.packedResults.utilization || 0);
+            const utilization = Math.round((this.packedResults.utilization || 0) * 100);
             
             placedBadge.innerHTML = `<i class="fas fa-check-circle me-1"></i>Placed: ${placed}`;
             leftoverBadge.innerHTML = `<i class="fas fa-exclamation-circle me-1"></i>Leftover: ${leftover}`;
@@ -1777,40 +1809,26 @@ class BinPackingVisualizer {
     
     downloadJsonExample() {
         const exampleData = {
+            "items": [
+                {
+                    "id": 0,
+                    "request_id": 1,
+                    "L": 983,
+                    "W": 375,
+                    "H": 2470,
+                    "num_axis": 2,
+                    "quantity": 5
+                }
+            ],
             "bin_size": {
                 "L": 9590,
                 "W": 2390,
                 "H": 2570
             },
-            "items": [
-                {
-                    "id": 1,
-                    "request_id": 1,
-                    "L": 610.0,
-                    "W": 575.0,
-                    "H": 1005.0,
-                    "quantity": 16
-                },
-                {
-                    "id": 2,
-                    "request_id": 2,
-                    "L": 1065.0,
-                    "W": 104.0,
-                    "H": 605.0,
-                    "quantity": 40
-                },
-                {
-                    "id": 3,
-                    "request_id": 3,
-                    "L": 900.0,
-                    "W": 680.0,
-                    "H": 1870.0,
-                    "quantity": 5
-                }
-            ],
             "parameters": {
                 "stack_rule": [],
-                "lifo_order": []
+                "lifo_order": [],
+                "weights": {}
             }
         };
         const filename = 'bin_packing_example.json';
@@ -1826,6 +1844,93 @@ class BinPackingVisualizer {
         URL.revokeObjectURL(url);
         
         this.showToast('Example JSON file downloaded!', 'success');
+    }
+
+    displayWeights(weights) {
+        const weightsCard = document.getElementById('weightsCard');
+        const weightsDisplay = document.getElementById('weightsDisplay');
+        
+        if (typeof weights === 'object' && weights !== null && !Array.isArray(weights)) {
+            // New object format - display as editable list
+            let html = '<div class="list-group list-group-flush">';
+            
+            Object.entries(weights).forEach(([key, value]) => {
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                        <span class="text-dark fw-medium">${key}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="number" 
+                                   class="form-control form-control-sm weight-input" 
+                                   data-weight-key="${key}"
+                                   value="${value}" 
+                                   step="0.1" 
+                                   style="width: 80px;">
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            weightsDisplay.innerHTML = html;
+            
+            // Store initial weights  
+            this.currentWeights = {...weights};
+            
+            // Add event listeners for weight changes
+            this.attachWeightChangeListeners();
+        } else if (Array.isArray(weights)) {
+            // Legacy array format - show simplified view
+            weightsDisplay.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Legacy weights format detected</strong><br>
+                    Array with ${weights.length} values: [${weights.slice(0, 3).join(', ')}${weights.length > 3 ? ', ...' : ''}]
+                </div>
+            `;
+        }
+        
+        weightsCard.style.display = 'block';
+    }
+
+    hideWeights() {
+        const weightsCard = document.getElementById('weightsCard');
+        weightsCard.style.display = 'none';
+    }
+
+    attachWeightChangeListeners() {
+        const weightInputs = document.querySelectorAll('.weight-input');
+        weightInputs.forEach(input => {
+            input.addEventListener('input', (e) => {
+                const key = e.target.dataset.weightKey;
+                const value = parseFloat(e.target.value) || 0;
+                
+                // Update current weights object
+                if (!this.currentWeights) {
+                    this.currentWeights = {};
+                }
+                this.currentWeights[key] = value;
+                
+                console.log(`Updated weight ${key} to ${value}`);
+            });
+        });
+    }
+
+    getCurrentWeights() {
+        // Get current weights from UI inputs or stored weights
+        if (this.currentWeights) {
+            return this.currentWeights;
+        }
+        
+        // If no current weights, try to get from inputs
+        const weights = {};
+        const weightInputs = document.querySelectorAll('.weight-input');
+        weightInputs.forEach(input => {
+            const key = input.dataset.weightKey;
+            const value = parseFloat(input.value) || 0;
+            weights[key] = value;
+        });
+        
+        return Object.keys(weights).length > 0 ? weights : null;
     }
 }
 

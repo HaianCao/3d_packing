@@ -4,9 +4,6 @@ import json
 import logging
 import requests
 from urllib.parse import urlparse
-from numba import njit
-
-@njit
 def get_rotation_by_id(l0, w0, h0, rotation_id, lock_axis):
     """
     Trả về (l, w, h) đã xoay tương ứng với rotation_id.
@@ -165,6 +162,29 @@ def pack_items():
         # Default lifo order - không có ràng buộc LIFO
         default_lifo_order = [0] * num_unique_items
         
+        # Extract parameters from input data
+        input_parameters = data.get('parameters', {})
+        
+        # Handle weights parameter - pass through original format to let algorithm decide
+        weights_param = input_parameters.get('weights')
+        if weights_param is not None:
+            # Pass weights in original format (object or array)
+            weights_value = weights_param
+            logging.info(f"Passing weights in original format: {type(weights_param).__name__} with {len(weights_param) if hasattr(weights_param, '__len__') else 'N/A'} items")
+        else:
+            # Default weights object for new format
+            weights_value = {
+                "W_lifo": 10.0,
+                "W_sim_l": -1.0,
+                "W_sim_w": -1.0,
+                "W_sim_h": 0.0,
+                "W_leftover_l_ratio": -5.0,
+                "W_leftover_w_ratio": -5.0,
+                "W_packable_l": -0.5,
+                "W_packable_w": -0.5
+            }
+            logging.info(f"Using default weights object: {weights_value}")
+        
         packing_request = {
             "items": [],
             "bin_size": {
@@ -173,12 +193,9 @@ def pack_items():
                 "H": bin_height
             },
             "parameters": {
-                "stack_rule": data.get('stack_rule', default_stack_rule),
-                "lifo_order": data.get('lifo_order', default_lifo_order)
-            },
-            "options": {
-                "use_local_search": False,
-                "weights": data.get('weights', [5, 1, 1, 5, 5, 1, 1, 1, 3, -1000, -1, -1, -1000])
+                "stack_rule": input_parameters.get('stack_rule', default_stack_rule),
+                "lifo_order": input_parameters.get('lifo_order', default_lifo_order),
+                "weights": weights_value
             }
         }
         
@@ -303,9 +320,16 @@ def pack_items():
                                 'height': item_group['H']
                             })
                 
-                # Tính utilization
-                total_items = len(packed_items) + len(leftover_items)
-                utilization = len(packed_items) / total_items if total_items > 0 else 0
+                # Tính utilization dựa trên volume, không phải số lượng items
+                bin_volume = bin_length * bin_width * bin_height
+                
+                # Tính tổng volume của items đã pack (sử dụng kích thước thực tế sau khi xoay)
+                packed_volume = 0
+                for item in packed_items:
+                    packed_volume += item['length'] * item['width'] * item['height']
+                
+                # Utilization = volume used / total bin volume
+                utilization = packed_volume / bin_volume if bin_volume > 0 else 0
                 
                 # Tạo packing steps từ packed_items theo thứ tự pack_order
                 packing_steps = []
@@ -384,6 +408,238 @@ def pack_items():
         
     except Exception as e:
         logging.error(f"Packing error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Server error: {str(e)}'
+        }), 500
+
+@app.route('/pack_step_by_step', methods=['POST'])
+def pack_items_step_by_step():
+    """API endpoint for step-by-step packing - trả về từng step một"""
+    try:
+        import time
+        start_time = time.time()
+        logging.info("Starting step-by-step packing request...")
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'}), 400
+        
+        # Lấy endpoint URL từ request
+        packing_endpoint = data.get('packing_endpoint', '')
+        if not packing_endpoint:
+            return jsonify({
+                'success': False, 
+                'message': 'Vui lòng cung cấp packing_endpoint URL'
+            }), 400
+        
+        # Get bin size
+        bin_size = data.get('bin_size', {})
+        bin_length = int(bin_size.get('length', 10))
+        bin_width = int(bin_size.get('width', 10))
+        bin_height = int(bin_size.get('height', 10))
+        
+        # Get items
+        items = data.get('items', [])
+        
+        logging.info(f"Received {len(items)} items for step-by-step packing")
+        
+        if not items:
+            return jsonify({'success': False, 'message': 'No items to pack'}), 400
+        
+        # Chuẩn bị data để gửi tới external endpoint
+        packing_request = {
+            "items": [],
+            "bin_size": {
+                "L": bin_length,
+                "W": bin_width, 
+                "H": bin_height
+            },
+            "parameters": {
+                "return_steps": True,  # Yêu cầu trả về steps
+                "step_by_step": True   # Chỉ định step-by-step mode
+            }
+        }
+        
+        # Chuyển đổi items sang format API
+        for item in items:
+            if 'length' in item and 'width' in item and 'height' in item:
+                packing_request["items"].append({
+                    "id": item.get('id', 0),
+                    "request_id": item.get('request_id', item.get('id', 0)),
+                    "L": float(item['length']),
+                    "W": float(item['width']),
+                    "H": float(item['height']),
+                    "num_axis": item.get('number_axis', item.get('num_axis', 2)),
+                    "quantity": 1
+                })
+            elif 'L' in item and 'W' in item and 'H' in item:
+                packing_request["items"].append({
+                    "id": item.get('id', 0),
+                    "request_id": item.get('request_id', item.get('id', 0)),
+                    "L": float(item['L']),
+                    "W": float(item['W']),
+                    "H": float(item['H']),
+                    "num_axis": item.get('num_axis', 2),
+                    "quantity": item.get('quantity', 1)
+                })
+        
+        # Gọi external packing endpoint với step-by-step mode
+        try:
+            logging.info("Calling external step-by-step packing endpoint...")
+            
+            response = requests.post(
+                packing_endpoint,
+                json=packing_request,
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                end_time = time.time()
+                
+                # Xử lý kết quả step-by-step
+                algorithm_steps = result.get('algorithm_steps', [])
+                final_result = result.get('final_result', {})
+                
+                # Chuyển đổi algorithm steps sang format webapp
+                webapp_steps = []
+                for i, step in enumerate(algorithm_steps):
+                    webapp_step = {
+                        'step_number': i + 1,
+                        'step_type': step.get('type', 'unknown'),
+                        'description': step.get('description', f'Algorithm step {i + 1}'),
+                        'data': step.get('data', {}),
+                        'timestamp': step.get('timestamp', time.time())
+                    }
+                    webapp_steps.append(webapp_step)
+                
+                # Xử lý final result như bình thường
+                packed_items = []
+                leftover_items = []
+                
+                if 'packed_items' in final_result:
+                    for item_group in final_result['packed_items']:
+                        positions = item_group.get('positions', [])
+                        rotation_ids = item_group.get('rotation_id', [])
+                        
+                        for i, pos in enumerate(positions):
+                            rotation_id = rotation_ids[i] if i < len(rotation_ids) else 0
+                            l0, w0, h0 = item_group['L'], item_group['W'], item_group['H']
+                            num_axis = item_group.get('num_axis', 2)
+                            lock_axis = (num_axis == 2)
+                            actual_l, actual_w, actual_h = get_rotation_by_id(l0, w0, h0, rotation_id, lock_axis)
+                            
+                            packed_items.append({
+                                'id': item_group['id'],
+                                'request_id': item_group.get('request_id', item_group['id']),
+                                'length': actual_l,
+                                'width': actual_w,
+                                'height': actual_h,
+                                'original_length': l0,
+                                'original_width': w0,
+                                'original_height': h0,
+                                'rotation_id': rotation_id,
+                                'x': pos['x'],
+                                'y': pos['y'],
+                                'z': pos['z'],
+                                'pack_order': i + 1
+                            })
+                
+                if 'left_over_items' in final_result:
+                    for item_group in final_result['left_over_items']:
+                        for _ in range(item_group.get('quantity', 1)):
+                            leftover_items.append({
+                                'id': item_group['id'],
+                                'request_id': item_group.get('request_id', item_group['id']),
+                                'length': item_group['L'],
+                                'width': item_group['W'],
+                                'height': item_group['H']
+                            })
+                
+                # Tính utilization
+                bin_volume = bin_length * bin_width * bin_height
+                packed_volume = sum(item['length'] * item['width'] * item['height'] for item in packed_items)
+                utilization = packed_volume / bin_volume if bin_volume > 0 else 0
+                
+                return jsonify({
+                    'success': True,
+                    'algorithm_steps': webapp_steps,
+                    'packed_items': packed_items,
+                    'leftover_items': leftover_items,
+                    'bin_size': {
+                        'length': bin_length,
+                        'width': bin_width,
+                        'height': bin_height
+                    },
+                    'utilization': utilization,
+                    'packing_time': end_time - start_time,
+                    'total_steps': len(webapp_steps)
+                })
+                
+            else:
+                error_msg = f"External endpoint returned status {response.status_code}"
+                try:
+                    error_detail = response.json()
+                    error_msg += f": {error_detail.get('message', error_detail.get('error', 'Unknown error'))}"
+                except:
+                    error_msg += f": {response.text}"
+                    
+                logging.error(f"External step-by-step endpoint error: {error_msg}")
+                return jsonify({
+                    'success': False,
+                    'message': error_msg
+                }), 400
+                
+        except requests.exceptions.ConnectionError:
+            return jsonify({
+                'success': False,
+                'message': 'Không thể kết nối tới packing endpoint'
+            }), 400
+        except Exception as e:
+            logging.error(f"External step-by-step endpoint call error: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Lỗi khi gọi external endpoint: {str(e)}'
+            }), 500
+        
+    except Exception as e:
+        logging.error(f"Step-by-step packing error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Server error: {str(e)}'
+        }), 500
+
+@app.route('/get_step', methods=['POST'])
+def get_specific_step():
+    """API endpoint để lấy step cụ thể từ algorithm"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'}), 400
+        
+        step_number = data.get('step_number', 0)
+        algorithm_steps = data.get('algorithm_steps', [])
+        
+        if step_number < 0 or step_number >= len(algorithm_steps):
+            return jsonify({
+                'success': False,
+                'message': f'Step number {step_number} out of range (0-{len(algorithm_steps)-1})'
+            }), 400
+        
+        step = algorithm_steps[step_number]
+        
+        return jsonify({
+            'success': True,
+            'step': step,
+            'step_number': step_number,
+            'total_steps': len(algorithm_steps)
+        })
+        
+    except Exception as e:
+        logging.error(f"Get step error: {str(e)}")
         return jsonify({
             'success': False,
             'message': f'Server error: {str(e)}'

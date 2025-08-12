@@ -37,85 +37,8 @@
     <div class="container-fluid h-100">
         <div class="row h-100">
             <!-- Control Panel -->
-            <div class="col-lg-4 col-xl-3 bg-light-bright p-4 control-panel">
-                <div class="h-100 overflow-auto">
-                    
-                    <!-- Algorithm Endpoint Configuration -->
-                    <div class="card mb-4 border-0 shadow-sm">
-                        <div class="card-header bg-primary-bright text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-cogs me-2"></i>
-                                Algorithm Configuration
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <label for="packingEndpoint" class="form-label fw-bold">
-                                    <i class="fas fa-link me-1"></i>
-                                    Packing Algorithm Endpoint
-                                </label>
-                                <div class="input-group">
-                                    <input type="url" class="form-control" id="packingEndpoint" 
-                                           value="http://localhost:3001/pack" 
-                                           placeholder="http://localhost:3001/pack">
-                                    <button class="btn btn-outline-primary" type="button" id="checkEndpoint">
-                                        <i class="fas fa-check-circle"></i>
-                                    </button>
-                                </div>
-                                <div class="form-text">URL của API endpoint thực hiện thuật toán packing</div>
-                                <div id="endpointStatus" class="mt-2"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Warehouse Settings -->
-                    <div class="card mb-4 border-0 shadow-sm">
-                        <div class="card-header bg-success-bright text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-warehouse me-2"></i>
-                                Warehouse Settings
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <label for="binLength" class="form-label fw-bold">
-                                    <i class="fas fa-arrows-alt-h me-1"></i>
-                                    Length
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="binLength" 
-                                           min="1" max="100" value="10" step="1" placeholder="Enter length">
-                                    <span class="input-group-text">units</span>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="binWidth" class="form-label fw-bold">
-                                    <i class="fas fa-arrows-alt-v me-1"></i>
-                                    Width
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="binWidth" 
-                                           min="1" max="100" value="10" step="1" placeholder="Enter width">
-                                    <span class="input-group-text">units</span>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="binHeight" class="form-label fw-bold">
-                                    <i class="fas fa-arrows-alt me-1"></i>
-                                    Height
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="binHeight" 
-                                           min="1" max="100" value="10" step="1" placeholder="Enter height">
-                                    <span class="input-group-text">units</span>
-                                </div>
-                            </div>
-                            <button class="btn btn-warning-bright w-100" id="reloadWarehouse">
-                                <i class="fas fa-sync-alt me-2"></i>
-                                Reload Warehouse
-                            </button>
-                        </div>
-                    </div>
+            <div class="col-lg-4 col-xl-3 bg-light-bright control-panel d-flex flex-column">
+                <div class="flex-grow-1 overflow-auto p-4" style="padding-bottom: 0 !important;">
 
                     <!-- File Upload -->
                     <div class="card mb-4 border-0 shadow-sm">
@@ -128,7 +51,6 @@
                         <div class="card-body">
                             <div class="mb-3">
                                 <input type="file" class="form-control" id="jsonFile" accept=".json">
-                                <div class="form-text">Upload JSON file with items and bin size</div>
                             </div>
                             <div class="d-grid gap-2">
                                 <button class="btn btn-info-bright" id="uploadJson">
@@ -154,7 +76,6 @@
                         <div class="card-body">
                             <div class="mb-3">
                                 <input type="file" class="form-control" id="visualizeFile" accept=".json">
-                                <div class="form-text">Upload packing result file with packed_items and coordinates for visualization only</div>
                             </div>
                             <div class="d-grid gap-2">
                                 <button class="btn btn-secondary" id="uploadVisualizationOnly">
@@ -246,14 +167,98 @@
                         </div>
                     </div>
 
-                    <!-- Action Buttons -->
+                    <!-- Weights Configuration -->
+                    <div class="card mb-4 border-0 shadow-sm" id="weightsCard" style="display: none;">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-balance-scale me-2"></i>
+                                Algorithm Weights
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-muted mb-3">
+                                <small><i class="fas fa-info-circle me-1"></i>
+                                These parameters will be loaded automatically from your JSON file</small>
+                            </div>
+                            <div id="weightsDisplay">
+                                <div class="text-center text-muted">
+                                    <i class="fas fa-upload fa-2x mb-2"></i>
+                                    <p>Import a JSON file with weights to configure algorithm parameters</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Warehouse Settings -->
+                    <div class="card mb-4 border-0 shadow-sm">
+                        <div class="card-header bg-success-bright text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-warehouse me-2"></i>
+                                Warehouse Settings
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-4">
+                                    <label class="form-label fw-bold small">
+                                        <i class="fas fa-arrows-alt-h me-1"></i>Length
+                                    </label>
+                                    <input type="number" class="form-control" id="binLength" 
+                                           min="1" max="100" value="10" step="1" placeholder="Length">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label fw-bold small">
+                                        <i class="fas fa-arrows-alt-v me-1"></i>Width
+                                    </label>
+                                    <input type="number" class="form-control" id="binWidth" 
+                                           min="1" max="100" value="10" step="1" placeholder="Width">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label fw-bold small">
+                                        <i class="fas fa-arrows-alt me-1"></i>Height
+                                    </label>
+                                    <input type="number" class="form-control" id="binHeight" 
+                                           min="1" max="100" value="10" step="1" placeholder="Height">
+                                </div>
+                            </div>
+                            <button class="btn btn-warning-bright w-100" id="reloadWarehouse">
+                                <i class="fas fa-sync-alt me-2"></i>
+                                Reload Warehouse
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Algorithm Endpoint Configuration -->
+                    <div class="card mb-4 border-0 shadow-sm">
+                        <div class="card-header bg-primary-bright text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-cogs me-2"></i>
+                                Algorithm Configuration
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="packingEndpoint" class="form-label fw-bold">
+                                    <i class="fas fa-link me-1"></i>
+                                    Packing Algorithm Endpoint
+                                </label>
+                                <div class="input-group">
+                                    <input type="url" class="form-control" id="packingEndpoint" 
+                                           value="https://wired-lenient-treefrog.ngrok-free.app/pack" 
+                                           placeholder="https://wired-lenient-treefrog.ngrok-free.app/pack">
+                                    <button class="btn btn-outline-primary" type="button" id="checkEndpoint">
+                                        <i class="fas fa-check-circle"></i>
+                                    </button>
+                                </div>
+                                <div id="endpointStatus" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons (Secondary Actions) -->
                     <div class="card border-0 shadow-sm">
                         <div class="card-body">
                             <div class="d-grid gap-2">
-                                <button class="btn btn-primary-bright btn-lg" id="runPacking">
-                                    <i class="fas fa-play me-2"></i>
-                                    Run Packing Algorithm
-                                </button>
                                 <div class="row">
                                     <div class="col-6">
                                         <button class="btn btn-success-bright w-100" id="exportResults" disabled>
@@ -275,6 +280,14 @@
                             </div>
                         </div>
                     </div>
+                </div>
+                
+                <!-- Separated Action Button Section -->
+                <div class="control-panel-action-section">
+                    <button class="btn btn-primary-bright btn-lg w-100 py-3 shadow-lg" id="runPacking">
+                        <i class="fas fa-play me-2"></i>
+                        Run Packing Algorithm
+                    </button>
                 </div>
             </div>
 
@@ -440,40 +453,26 @@
                         <!-- New Format Example (Only) -->
                         <pre class="bg-light p-3 border rounded json-example" id="jsonExampleNew" style="font-size: 0.9rem; overflow-x: auto;">
 {
+  "items": [
+    {
+      "id": 0,
+      "request_id": 1,
+      "L": 983,
+      "W": 375,
+      "H": 2470,
+      "num_axis": 2,
+      "quantity": 5
+    }
+  ],
   "bin_size": {
     "L": 9590,
     "W": 2390,
     "H": 2570
   },
-  "items": [
-    {
-      "id": 1,
-      "request_id": 1,
-      "L": 610.0,
-      "W": 575.0,
-      "H": 1005.0,
-      "quantity": 16
-    },
-    {
-      "id": 2,
-      "request_id": 2,
-      "L": 1065.0,
-      "W": 104.0,
-      "H": 605.0,
-      "quantity": 40
-    },
-    {
-      "id": 3,
-      "request_id": 3,
-      "L": 900.0,
-      "W": 680.0,
-      "H": 1870.0,
-      "quantity": 5
-    }
-  ],
   "parameters": {
     "stack_rule": [],
-    "lifo_order": []
+    "lifo_order": [],
+    "weights": {}
   }
 }</pre>
                     </div>
@@ -521,8 +520,8 @@
                                     <tr>
                                         <td><code>items[].request_id</code></td>
                                         <td>Number</td>
-                                        <td>Request identifier (usually same as id)</td>
-                                        <td><span class="badge bg-warning">Optional</span></td>
+                                        <td>Unique request identifier for each item instance</td>
+                                        <td><span class="badge bg-success">Yes</span></td>
                                     </tr>
                                     <tr>
                                         <td><code>items[].L</code></td>
@@ -543,9 +542,21 @@
                                         <td><span class="badge bg-success">Yes</span></td>
                                     </tr>
                                     <tr>
+                                        <td><code>items[].num_axis</code></td>
+                                        <td>Number</td>
+                                        <td>Number of rotation axes (2 or 6)</td>
+                                        <td><span class="badge bg-warning">Optional</span></td>
+                                    </tr>
+                                    <tr>
                                         <td><code>items[].quantity</code></td>
                                         <td>Number</td>
                                         <td>Number of identical items to pack</td>
+                                        <td><span class="badge bg-warning">Optional</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>parameters.weights</code></td>
+                                        <td>Object</td>
+                                        <td>Algorithm weight parameters for optimization</td>
                                         <td><span class="badge bg-warning">Optional</span></td>
                                     </tr>
                                     <tr>
@@ -578,6 +589,8 @@
             </div>
         </div>
     </div>
+
+
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
