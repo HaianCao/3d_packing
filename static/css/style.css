@@ -1,25 +1,60 @@
 /* Bright Color Palette */
 :root {
-    --primary-bright: #4CAF50;
-    --secondary-bright: #FF9800;
-    --success-bright: #8BC34A;
-    --info-bright: #03A9F4;
-    --warning-bright: #FFC107;
-    --danger-bright: #F44336;
-    --light-bright: #F8F9FA;
-    --dark-bright: #2E7D32;
-    --orange-bright: #FF6B35;
-    --purple-bright: #9C27B0;
-    
+    --primary-bright: #007bff;
+    --secondary-bright: #6c757d;
+    --success-bright: #28a745;
+    --warning-bright: #ffc107;
+    --danger-bright: #dc3545;
+    --info-bright: #17a2b8;
+    --light-bright: #f8f9fa;
+    --orange-bright: #fd7e14;
+    --purple-bright: #6f42c1;
+
     --gradient-primary: linear-gradient(135deg, #4CAF50, #8BC34A);
     --gradient-secondary: linear-gradient(135deg, #FF9800, #FFC107);
     --gradient-info: linear-gradient(135deg, #03A9F4, #81C784);
+}
+
+/* Additional color utilities */
+.text-orange-bright {
+    color: var(--orange-bright) !important;
+}
+
+.text-purple-bright {
+    color: var(--purple-bright) !important;
+}
+
+.text-success-bright {
+    color: var(--success-bright) !important;
+}
+
+.text-primary-bright {
+    color: var(--primary-bright) !important;
+}
+
+.text-warning {
+    color: var(--warning-bright) !important;
+}
+
+.text-info {
+    color: var(--info-bright) !important;
 }
 
 /* Global Styles */
 
 html, body {
     height: 100%;
+}
+
+/* Hide number input spinners */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type=number] {
+    -moz-appearance: textfield;
 }
 
 /* Header Styles */
@@ -256,13 +291,13 @@ body {
         border-right: none;
         border-bottom: 2px solid var(--primary-bright);
     }
-    
+
     .stats-badges {
         display: flex;
         flex-wrap: wrap;
         gap: 5px;
     }
-    
+
     .stats-badges .badge {
         font-size: 0.8rem;
         padding: 6px 10px;
@@ -273,15 +308,15 @@ body {
     .container-fluid {
         padding: 0;
     }
-    
+
     .control-panel {
         padding: 1rem;
     }
-    
+
     .card-body {
         padding: 1rem;
     }
-    
+
     .btn {
         font-size: 0.9rem;
     }
@@ -318,6 +353,27 @@ body {
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+/* Accordion Styles */
+.card-header .btn-link {
+    transition: all 0.3s ease;
+}
+
+.card-header .btn-link .fa-chevron-down {
+    transition: transform 0.3s ease;
+}
+
+.card-header .btn-link[aria-expanded="true"] .fa-chevron-down {
+    transform: rotate(180deg);
+}
+
+.card-header .btn-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.collapse {
+    transition: all 0.3s ease;
 }
 
 .slide-in {
