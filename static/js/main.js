@@ -5,74 +5,73 @@ class BinPackingVisualizer {
         this.binSize = { length: 10, width: 10, height: 10 };
         this.nextItemId = 1;
         this.loadingModal = null;
-        
+
         // Store original input data for export
         this.originalInputData = null;
-        
+
         // Step-by-step visualization
         this.packingSteps = [];
         this.currentStepIndex = -1;
         this.isPlaying = false;
         this.playInterval = null;
         this.stepSpeed = 1000; // ms
-        
+
+        // Algorithm weights and training
+        this.weights = {}; // Store current algorithm weights
+        this.currentWeights = {}; // Store editable weights
+
         this.init();
     }
-    
+
     init() {
-        this.setupEventListeners();
+        this.initializeEventListeners();
         this.updateBinSize(); // Initialize bin size from input values
         this.updateWarehouseDisplay();
         this.jsonStructureModal = new bootstrap.Modal(document.getElementById('jsonStructureModal'));
         this.initializePlot();
+        this.hideWeights(); // Initially hide weights section
     }
-    
-    setupEventListeners() {
-        // Algorithm endpoint configuration
-        document.getElementById('checkEndpoint').addEventListener('click', this.checkPackingEndpoint.bind(this));
-        document.getElementById('packingEndpoint').addEventListener('input', this.onEndpointChange.bind(this));
-        
-        // Warehouse controls
-        document.getElementById('binLength').addEventListener('input', this.updateBinSize.bind(this));
-        document.getElementById('binWidth').addEventListener('input', this.updateBinSize.bind(this));
-        document.getElementById('binHeight').addEventListener('input', this.updateBinSize.bind(this));
-        document.getElementById('reloadWarehouse').addEventListener('click', this.reloadWarehouse.bind(this));
-        
-        // Item management
-        document.getElementById('addItem').addEventListener('click', this.addItem.bind(this));
-        document.getElementById('clearItems').addEventListener('click', this.clearItems.bind(this));
-        
-        // File upload
-        document.getElementById('uploadJson').addEventListener('click', this.uploadJson.bind(this));
-        document.getElementById('showJsonStructure').addEventListener('click', this.showJsonStructure.bind(this));
-        document.getElementById('copyJsonExample').addEventListener('click', this.copyJsonExample.bind(this));
-        document.getElementById('downloadJsonExample').addEventListener('click', this.downloadJsonExample.bind(this));
-        
-        // Export functions
-        document.getElementById('exportItems').addEventListener('click', this.exportOriginalFile.bind(this));
-        document.getElementById('exportItemsList').addEventListener('click', this.exportItemsList.bind(this));
-        
-        // Visualization only upload
-        document.getElementById('uploadVisualizationOnly').addEventListener('click', this.uploadVisualizationOnly.bind(this));
-        document.getElementById('showVisualizationFormat').addEventListener('click', this.showVisualizationFormat.bind(this));
-        
-        // JSON format (only new format now)
-        
-        // Actions
-        document.getElementById('runPacking').addEventListener('click', this.runPacking.bind(this));
-        document.getElementById('exportResults').addEventListener('click', this.exportResults.bind(this));
-        document.getElementById('resetAll').addEventListener('click', this.resetAll.bind(this));
-        
-        // Step controls
-        document.getElementById('prevStep').addEventListener('click', this.previousStep.bind(this));
-        document.getElementById('nextStep').addEventListener('click', this.nextStep.bind(this));
-        document.getElementById('playPause').addEventListener('click', this.togglePlayPause.bind(this));
-        document.getElementById('stepSpeed').addEventListener('input', this.updateStepSpeed.bind(this));
-        
-        // Form validation
-        this.setupFormValidation();
+
+    initializeEventListeners() {
+        // File upload events
+        document.getElementById('uploadJson').addEventListener('click', () => this.uploadJson());
+        document.getElementById('uploadVisualizationOnly').addEventListener('click', () => this.uploadVisualizationOnly());
+        document.getElementById('showJsonStructure').addEventListener('click', () => this.showJsonStructure());
+        document.getElementById('showVisualizationFormat').addEventListener('click', () => this.showVisualizationFormat());
+
+        // Item management events
+        document.getElementById('addItem').addEventListener('click', () => this.addItem());
+        document.getElementById('clearItems').addEventListener('click', () => this.clearItems());
+        document.getElementById('exportItems').addEventListener('click', () => this.exportItems());
+
+        // Packing events
+        document.getElementById('runPacking').addEventListener('click', () => this.runPacking());
+        document.getElementById('reloadWarehouse').addEventListener('click', () => this.reloadWarehouse());
+
+        // Export events
+        document.getElementById('exportResults').addEventListener('click', () => this.exportResults());
+        document.getElementById('exportItemsList').addEventListener('click', () => this.exportItemsList());
+        document.getElementById('resetAll').addEventListener('click', () => this.resetAll());
+
+        // Configuration events
+        document.getElementById('checkEndpoint').addEventListener('click', () => this.checkEndpoint());
+
+        // Training events
+        document.getElementById('runTraining').addEventListener('click', () => this.runTraining());
+        document.getElementById('checkTrainingEndpoint').addEventListener('click', () => this.checkTrainingEndpoint());
+        document.getElementById('showTrainingFormat').addEventListener('click', () => this.showTrainingFormat());
+
+        // Modal events
+        document.getElementById('copyJsonExample').addEventListener('click', () => this.copyJsonExample());
+        document.getElementById('downloadJsonExample').addEventListener('click', () => this.downloadJsonExample());
+
+        // Step control events
+        document.getElementById('playPause').addEventListener('click', () => this.togglePlayPauseSteps());
+        document.getElementById('nextStep').addEventListener('click', () => this.nextStep());
+        document.getElementById('prevStep').addEventListener('click', () => this.prevStep());
+        document.getElementById('stepSpeed').addEventListener('input', (e) => this.updateStepSpeed(e.target.value));
     }
-    
+
     setupFormValidation() {
         const inputs = ['itemLength', 'itemWidth', 'itemHeight', 'itemId', 'binLength', 'binWidth', 'binHeight'];
         inputs.forEach(id => {
@@ -87,7 +86,7 @@ class BinPackingVisualizer {
                     this.updateBinSize();
                 }
             });
-            
+
             // Also handle blur event to ensure validation when user leaves the field
             input.addEventListener('blur', () => {
                 const value = parseInt(input.value);
@@ -100,29 +99,30 @@ class BinPackingVisualizer {
             });
         });
     }
-    
+
     updateBinSize() {
         const length = parseInt(document.getElementById('binLength').value) || 1;
         const width = parseInt(document.getElementById('binWidth').value) || 1;
         const height = parseInt(document.getElementById('binHeight').value) || 1;
-        
+
         // Validation: ensure values are positive
         if (length < 1) document.getElementById('binLength').value = 1;
         if (width < 1) document.getElementById('binWidth').value = 1;
         if (height < 1) document.getElementById('binHeight').value = 1;
-        
-        this.binSize = { 
-            length: Math.max(1, length), 
-            width: Math.max(1, width), 
-            height: Math.max(1, height) 
+
+        this.binSize = {
+            length: Math.max(1, length),
+            width: Math.max(1, width),
+            height: Math.max(1, height)
         };
     }
-    
+
     reloadWarehouse() {
+        this.updateBinSize(); // Ensure bin size is updated from inputs
         this.updateWarehouseDisplay();
-        this.showToast('Warehouse reloaded with new dimensions!', 'success');
+        this.showToast('Warehouse dimensions updated!', 'success');
     }
-    
+
     addItem() {
         const length = parseInt(document.getElementById('itemLength').value);
         const width = parseInt(document.getElementById('itemWidth').value);
@@ -130,18 +130,18 @@ class BinPackingVisualizer {
         const id = parseInt(document.getElementById('itemId').value);
         const numberAxis = parseInt(document.getElementById('itemNumberAxis').value);
         const quantity = parseInt(document.getElementById('itemQuantity').value);
-        
+
         // Validation
         if (!length || !width || !height || !id || !quantity) {
             this.showToast('Please fill in all item fields', 'danger');
             return;
         }
-        
+
         if (length < 1 || width < 1 || height < 1 || id < 1 || quantity < 1) {
             this.showToast('All dimensions, ID and quantity must be positive numbers', 'danger');
             return;
         }
-        
+
         // Check if request_id already exists
         if (this.items.some(item => {
             const itemRequestId = (item.request_id !== undefined && item.request_id !== null) ? item.request_id : item.id;
@@ -150,11 +150,10 @@ class BinPackingVisualizer {
             this.showToast('Item ID already exists. Please use a different ID.', 'warning');
             return;
         }
-        
+
         // Create items with similar logic as JSON upload
-        const originalItemCount = 1;
         let itemsAdded = 0;
-        
+
         // Add individual items for each quantity using nextItemId for unique IDs
         for (let i = 0; i < quantity; i++) {
             const uniqueId = this.nextItemId + i;
@@ -171,49 +170,49 @@ class BinPackingVisualizer {
             this.items.push(item);
             itemsAdded++;
         }
-        
+
         this.nextItemId += quantity;
         this.updateItemsList();
         this.updateItemId();
-        
+
         // Clear form
         document.getElementById('itemLength').value = 2;
         document.getElementById('itemWidth').value = 1;
         document.getElementById('itemHeight').value = 1;
         document.getElementById('itemQuantity').value = 1;
         document.getElementById('itemNumberAxis').value = 2;
-        
-        const message = quantity === 1 ? 
-            `Item ${id} added successfully!` : 
+
+        const message = quantity === 1 ?
+            `Item ${id} added successfully!` :
             `${quantity} items added with request ID ${id} (expanded from 1 unique item)`;
         this.showToast(message, 'success');
     }
-    
+
     removeItem(id) {
         this.items = this.items.filter(item => item.id !== id);
         this.updateItemsList();
         this.showToast(`Item ${id} removed`, 'info');
     }
-    
+
     removeItemGroup(requestId) {
         const itemsToRemove = this.items.filter(item => {
             const itemRequestId = (item.request_id !== undefined && item.request_id !== null) ? item.request_id : item.id;
             return itemRequestId == requestId; // Use == to handle string/number comparison
         });
         const count = itemsToRemove.length;
-        
+
         this.items = this.items.filter(item => {
             const itemRequestId = (item.request_id !== undefined && item.request_id !== null) ? item.request_id : item.id;
             return itemRequestId != requestId; // Use != to handle string/number comparison
         });
         this.updateItemsList();
-        
-        const message = count === 1 ? 
-            `Item ${requestId} removed` : 
+
+        const message = count === 1 ?
+            `Item ${requestId} removed` :
             `${count} items with request ID ${requestId} removed`;
         this.showToast(message, 'info');
     }
-    
+
     clearItems() {
         this.items = [];
         this.packedResults = null;
@@ -227,17 +226,17 @@ class BinPackingVisualizer {
         document.getElementById('stepControlPanel').style.display = 'none';
         this.showToast('All items cleared', 'info');
     }
-    
+
     updateItemId() {
         document.getElementById('itemId').value = this.nextItemId;
     }
-    
+
     updateItemsList() {
         const itemsList = document.getElementById('itemsList');
         const itemCount = document.getElementById('itemCount');
-        
+
         itemCount.textContent = this.items.length;
-        
+
         if (this.items.length === 0) {
             itemsList.innerHTML = `
                 <div class="text-center p-3 text-muted">
@@ -250,11 +249,11 @@ class BinPackingVisualizer {
             document.getElementById('exportItemsList').disabled = true;
             return;
         }
-        
+
         // Enable export items buttons when items exist
         document.getElementById('exportItems').disabled = false;
         document.getElementById('exportItemsList').disabled = false;
-        
+
         // Group items by request_id for display similar to JSON upload
         const groupedItems = {};
         this.items.forEach(item => {
@@ -264,12 +263,12 @@ class BinPackingVisualizer {
             }
             groupedItems[requestId].push(item);
         });
-        
+
         itemsList.innerHTML = Object.keys(groupedItems).map(requestId => {
             const group = groupedItems[requestId];
             const firstItem = group[0];
             const count = group.length;
-            
+
             return `
                 <div class="item-entry" data-id="${requestId}">
                     <div class="d-flex justify-content-between align-items-center">
@@ -291,20 +290,20 @@ class BinPackingVisualizer {
             `;
         }).join('');
     }
-    
+
     async uploadJson() {
         const fileInput = document.getElementById('jsonFile');
         const file = fileInput.files[0];
-        
+
         if (!file) {
             this.showToast('Please select a JSON file', 'warning');
             return;
         }
-        
+
         try {
             const text = await file.text();
             const data = JSON.parse(text);
-            
+
             // Validate JSON structure
             const response = await fetch('/validate_json', {
                 method: 'POST',
@@ -313,17 +312,17 @@ class BinPackingVisualizer {
                 },
                 body: JSON.stringify(data)
             });
-            
+
             const result = await response.json();
-            
+
             if (!result.success) {
                 this.showToast(`JSON validation failed: ${result.message}`, 'danger');
                 return;
             }
-            
+
             // Store original input data for export
             this.originalInputData = data;
-            
+
             // Apply data - use processed items from server if available
             if (result.processed_items) {
                 this.items = result.processed_items;
@@ -338,7 +337,7 @@ class BinPackingVisualizer {
                 }));
             }
             this.binSize = result.bin_size;
-            
+
             // Update UI
             document.getElementById('binLength').value = this.binSize.length;
             document.getElementById('binWidth').value = this.binSize.width;
@@ -346,22 +345,22 @@ class BinPackingVisualizer {
             this.updateBinSize();
             this.updateItemsList();
             this.updateWarehouseDisplay();
-            
+
             // Display weights if available
             if (data.parameters && data.parameters.weights) {
-                this.displayWeights(data.parameters.weights);
+                this.showWeights(data.parameters.weights);
             } else {
                 this.hideWeights();
             }
-            
+
             this.nextItemId = Math.max(...this.items.map(item => item.id), 0) + 1;
             this.updateItemId();
-            
-            const itemMessage = result.original_item_count && result.original_item_count !== result.item_count 
+
+            const itemMessage = result.original_item_count && result.original_item_count !== result.item_count
                 ? `Loaded ${result.item_count} items (expanded from ${result.original_item_count} unique items) from JSON file`
                 : `Loaded ${result.item_count} items from JSON file`;
             this.showToast(itemMessage, 'success');
-            
+
         } catch (error) {
             this.showToast(`Failed to load JSON file: ${error.message}`, 'danger');
         }
@@ -372,14 +371,14 @@ class BinPackingVisualizer {
     visualizeItemsOnly(items) {
         // Create plot data for visualization only
         const traces = [];
-        
+
         // Add bin outline
         traces.push(this.createWarehouseOutline());
-        
+
         // Add items as colored boxes
         items.forEach((item, index) => {
             const color = item.color || `hsl(${(index * 137.5) % 360}, 70%, 50%)`;
-            
+
             traces.push({
                 type: 'mesh3d',
                 x: [item.x, item.x + item.length, item.x + item.length, item.x,
@@ -400,7 +399,7 @@ class BinPackingVisualizer {
                               '<extra></extra>'
             });
         });
-        
+
         const layout = {
             scene: {
                 xaxis: { title: 'Length', range: [0, this.binSize.length] },
@@ -412,34 +411,35 @@ class BinPackingVisualizer {
             showlegend: false,
             margin: { l: 0, r: 0, b: 0, t: 30 }
         };
-        
+
         Plotly.newPlot('plot3d', traces, layout);
-        
+
         // Update stats
         document.getElementById('placedBadge').textContent = `Visualized: ${items.length}`;
         document.getElementById('leftoverBadge').textContent = 'Leftover: 0';
         document.getElementById('utilizationBadge').textContent = 'Utilization: N/A';
+        document.getElementById('trainingScoreBadge').textContent = 'Training Score: N/A';
     }
 
     async uploadVisualizationOnly() {
         const fileInput = document.getElementById('visualizeFile');
         const file = fileInput.files[0];
-        
+
         if (!file) {
             this.showToast('Please select a JSON file for visualization', 'warning');
             return;
         }
-        
+
         try {
             const text = await file.text();
             const data = JSON.parse(text);
-            
+
             // Validate that the data has the expected packing result structure
             if (!data.bin_size || !data.packed_items) {
                 this.showToast('Invalid format: Expected packing result structure with bin_size and packed_items', 'danger');
                 return;
             }
-            
+
             // Extract bin size
             const binSize = data.bin_size;
             this.binSize = {
@@ -447,17 +447,17 @@ class BinPackingVisualizer {
                 width: binSize.width || binSize.W || 10,
                 height: binSize.height || binSize.H || 10
             };
-            
+
             // Update UI with bin size
             document.getElementById('binLength').value = this.binSize.length;
             document.getElementById('binWidth').value = this.binSize.width;
             document.getElementById('binHeight').value = this.binSize.height;
             this.updateBinSize();
-            
+
             // Use packed items directly for visualization
             const packedItems = data.packed_items || [];
             const leftoverItems = data.leftover_items || [];
-            
+
             // Set packed results to enable full interface like packing algorithm
             this.packedResults = {
                 packed_items: packedItems,
@@ -467,33 +467,33 @@ class BinPackingVisualizer {
                 bin_size: this.binSize,
                 steps: [] // Empty steps for visualization only
             };
-            
+
             // Use same visualization flow as packing algorithm
             setTimeout(() => {
                 try {
                     // Use the regular visualization function to match packing algorithm interface
                     this.visualizePacking();
-                    
+
                     // Update stats like packing algorithm
                     this.updateStats();
-                    
+
                     // Show step controls (even if empty)
                     this.initializeStepControls();
-                    
+
                     // Show items information panel
                     this.displayItemsInfo(packedItems, leftoverItems);
-                    
+
                     // Enable export like packing algorithm
                     document.getElementById('exportResults').disabled = false;
                     document.getElementById('exportItemsList').disabled = false;
-                    
+
                     this.showToast(`Visualized ${packedItems.length} packed items from result file`, 'success');
                 } catch (error) {
                     console.error('Visualization error:', error);
                     this.showToast('Error rendering visualization. Please try again.', 'danger');
                 }
             }, 10);
-            
+
         } catch (error) {
             this.showToast(`Failed to load packing result file: ${error.message}`, 'danger');
         }
@@ -502,14 +502,14 @@ class BinPackingVisualizer {
     visualizePackedItems(packedItems) {
         // Create plot data for packed items with their coordinates
         const traces = [];
-        
+
         // Add warehouse outline
         traces.push(this.createWarehouseOutline());
-        
+
         // Add each packed item as a colored box at its packed position
         packedItems.forEach((item, index) => {
             const color = `hsl(${(index * 137.5) % 360}, 70%, 50%)`;
-            
+
             traces.push({
                 type: 'mesh3d',
                 x: [item.x, item.x + item.length, item.x + item.length, item.x,
@@ -530,7 +530,7 @@ class BinPackingVisualizer {
                               '<extra></extra>'
             });
         });
-        
+
         const layout = {
             scene: {
                 xaxis: { title: 'Length', range: [0, this.binSize.length] },
@@ -542,9 +542,9 @@ class BinPackingVisualizer {
             showlegend: false,
             margin: { l: 0, r: 0, b: 0, t: 30 }
         };
-        
+
         Plotly.newPlot('plot3d', traces, layout);
-        
+
         // Update stats
         document.getElementById('placedBadge').textContent = `Packed: ${packedItems.length}`;
         document.getElementById('leftoverBadge').textContent = 'Leftover: N/A';
@@ -638,20 +638,20 @@ class BinPackingVisualizer {
                 </div>
             </div>
         `;
-        
+
         // Remove existing modal if it exists
         const existingModal = document.getElementById('visualizationFormatModal');
         if (existingModal) {
             existingModal.remove();
         }
-        
+
         // Add modal to DOM
         document.body.insertAdjacentHTML('beforeend', modalContent);
-        
+
         // Show modal
         const modal = new bootstrap.Modal(document.getElementById('visualizationFormatModal'));
         modal.show();
-        
+
         // Add event listeners for copy and download
         document.getElementById('copyVisualizationExample').addEventListener('click', this.copyVisualizationExample.bind(this));
         document.getElementById('downloadVisualizationExample').addEventListener('click', this.downloadVisualizationExample.bind(this));
@@ -685,7 +685,7 @@ class BinPackingVisualizer {
                 }
             ]
         };
-        
+
         navigator.clipboard.writeText(JSON.stringify(example, null, 2)).then(() => {
             this.showToast('Visualization example copied to clipboard!', 'success');
         }).catch(() => {
@@ -721,7 +721,7 @@ class BinPackingVisualizer {
                 }
             ]
         };
-        
+
         const blob = new Blob([JSON.stringify(example, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -731,14 +731,14 @@ class BinPackingVisualizer {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
+
         this.showToast('Visualization example downloaded!', 'success');
     }
 
     displayItemsInfo(packedItems, leftoverItems = []) {
         const tableBody = document.getElementById('itemsInfoTable');
         tableBody.innerHTML = '';
-        
+
         // Show packed items
         packedItems.forEach(item => {
             const volume = item.length * item.width * item.height;
@@ -753,7 +753,7 @@ class BinPackingVisualizer {
                 <td>(${item.x}, ${item.y}, ${item.z})</td>
             `;
         });
-        
+
         // Show leftover items if any
         leftoverItems.forEach(item => {
             const volume = item.length * item.width * item.height;
@@ -768,84 +768,102 @@ class BinPackingVisualizer {
                 <td>-</td>
             `;
         });
-        
+
         // Show the items info panel
         document.getElementById('itemsInfoPanel').style.display = 'block';
     }
 
-    visualizeResults(result) {
-        // Use the common visualize function for both packing results and visualization-only
-        const packedItems = result.packed_items || [];
-        const leftoverItems = result.leftover_items || [];
-        
-        // Create plot data
-        const traces = [];
-        
+    visualizePacking() {
+        if (!this.packedResults) return;
+
+        const data = [];
+
         // Add warehouse outline
-        traces.push(this.createWarehouseOutline());
-        
-        // Add each packed item as a colored box at its packed position
+        data.push(this.createWarehouseOutline());
+
+        // Color palette for items
+        const colors = [
+            '#FF6B35', '#F7931E', '#FFD23F', '#06FFA5',
+            '#A8E6CF', '#FFB3BA', '#FFDFBA', '#FFFFBA',
+            '#BAE1FF', '#DDA0DD', '#98FB98', '#F0E68C'
+        ];
+
+        // Show all packed items (no limit to match visualization only mode)
+        const packedItems = this.packedResults.packed_items || [];
+
+        // Add placed items
         packedItems.forEach((item, index) => {
-            const color = `hsl(${(index * 137.5) % 360}, 70%, 50%)`;
-            
-            traces.push({
-                type: 'mesh3d',
-                x: [item.x, item.x + item.length, item.x + item.length, item.x,
-                    item.x, item.x + item.length, item.x + item.length, item.x],
-                y: [item.y, item.y, item.y + item.width, item.y + item.width,
-                    item.y, item.y, item.y + item.width, item.y + item.width],
-                z: [item.z, item.z, item.z, item.z,
-                    item.z + item.height, item.z + item.height, item.z + item.height, item.z + item.height],
-                i: [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
-                j: [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
-                k: [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-                color: color,
-                opacity: 0.8,
-                name: `Item ${item.id}`,
-                hovertemplate: `<b>Item ${item.id}</b><br>` +
-                              `Size: ${item.length}×${item.width}×${item.height}<br>` +
-                              `Position: (${item.x}, ${item.y}, ${item.z})<br>` +
-                              '<extra></extra>'
-            });
+            const color = colors[index % colors.length];
+            const itemMesh = this.createItemMesh(item, color);
+            data.push(itemMesh);
         });
-        
+
+        const aspectRatio = this.calculateAspectRatio();
+
+        // Update plot
         const layout = {
             scene: {
-                xaxis: { title: 'Length', range: [0, this.binSize.length] },
-                yaxis: { title: 'Width', range: [0, this.binSize.width] },
-                zaxis: { title: 'Height', range: [0, this.binSize.height] },
-                aspectmode: 'cube'
+                xaxis: {
+                    title: 'Length',
+                    range: [0, this.binSize.length],
+                    showgrid: true,
+                    gridcolor: '#E0E0E0'
+                },
+                yaxis: {
+                    title: 'Width',
+                    range: [0, this.binSize.width],
+                    showgrid: true,
+                    gridcolor: '#E0E0E0'
+                },
+                zaxis: {
+                    title: 'Height',
+                    range: [0, this.binSize.height],
+                    showgrid: true,
+                    gridcolor: '#E0E0E0'
+                },
+                bgcolor: '#F8F9FA',
+                camera: {
+                    eye: { x: 1.5 * aspectRatio.x, y: 1.5 * aspectRatio.y, z: 1.5 * aspectRatio.z }
+                },
+                aspectmode: 'manual',
+                aspectratio: {
+                    x: aspectRatio.x,
+                    y: aspectRatio.y,
+                    z: aspectRatio.z
+                }
             },
-            title: 'Warehouse Visualization',
-            showlegend: false,
-            margin: { l: 0, r: 0, b: 0, t: 30 }
+            margin: { l: 0, r: 0, b: 0, t: 0 },
+            paper_bgcolor: 'transparent',
+            showlegend: false
         };
-        
-        Plotly.newPlot('plot3d', traces, layout);
-        
-        // Update stats
-        document.getElementById('placedBadge').textContent = `Packed: ${packedItems.length}`;
-        document.getElementById('leftoverBadge').textContent = `Leftover: ${leftoverItems.length}`;
-        const utilization = result.utilization ? `${(result.utilization * 100).toFixed(1)}%` : 'N/A';
-        document.getElementById('utilizationBadge').textContent = `Utilization: ${utilization}`;
+
+
+        Plotly.react('plot3d', data, layout);
+
+        // Add click event for item details
+        document.getElementById('plot3d').on('plotly_click', (eventData) => {
+            if (eventData.points[0] && eventData.points[0].customdata) {
+                this.showItemDetails(eventData.points[0].customdata);
+            }
+        });
     }
-    
+
     // Algorithm Endpoint Configuration Functions
-    async checkPackingEndpoint() {
+    async checkEndpoint() {
         const endpointUrl = document.getElementById('packingEndpoint').value.trim();
         const statusDiv = document.getElementById('endpointStatus');
         const checkBtn = document.getElementById('checkEndpoint');
-        
+
         if (!endpointUrl) {
             this.showEndpointStatus('error', 'Vui lòng nhập endpoint URL');
             return;
         }
-        
+
         // Show loading state
         checkBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         checkBtn.disabled = true;
         statusDiv.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Đang kiểm tra...</div>';
-        
+
         try {
             const response = await fetch('/check_endpoint', {
                 method: 'POST',
@@ -856,9 +874,9 @@ class BinPackingVisualizer {
                     endpoint_url: endpointUrl
                 })
             });
-            
+
             const result = await response.json();
-            
+
             if (result.success) {
                 this.showEndpointStatus('success', result.message, result.endpoint_info);
                 this.showToast('Endpoint hoạt động bình thường!', 'success');
@@ -866,7 +884,7 @@ class BinPackingVisualizer {
                 this.showEndpointStatus('error', result.message);
                 this.showToast(`Endpoint error: ${result.message}`, 'danger');
             }
-            
+
         } catch (error) {
             console.error('Check endpoint error:', error);
             this.showEndpointStatus('error', 'Lỗi kết nối khi kiểm tra endpoint');
@@ -877,11 +895,11 @@ class BinPackingVisualizer {
             checkBtn.disabled = false;
         }
     }
-    
+
     showEndpointStatus(type, message, info = null) {
         const statusDiv = document.getElementById('endpointStatus');
         let iconClass, bgClass, textClass;
-        
+
         switch (type) {
             case 'success':
                 iconClass = 'fas fa-check-circle';
@@ -903,52 +921,52 @@ class BinPackingVisualizer {
                 bgClass = 'bg-info';
                 textClass = 'text-info';
         }
-        
+
         let html = `
             <div class="alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'warning'} alert-dismissible fade show p-2 mt-2" role="alert">
                 <i class="${iconClass} me-1"></i>
                 <small>${message}</small>
         `;
-        
+
         if (info) {
             html += `
                 <br><small class="text-muted">
-                    Service: ${info.service || 'Unknown'} | 
+                    Service: ${info.service || 'Unknown'} |
                     Version: ${info.version || 'Unknown'}
                 </small>
             `;
         }
-        
+
         html += `
                 <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
             </div>
         `;
-        
+
         statusDiv.innerHTML = html;
     }
-    
+
     onEndpointChange() {
         // Clear status when endpoint URL changes
         document.getElementById('endpointStatus').innerHTML = '';
     }
-    
+
     async runPacking() {
         if (this.items.length === 0) {
             this.showToast('Please add items before running the packing algorithm', 'warning');
             return;
         }
-        
+
         // Get endpoint configuration
         const packingEndpoint = document.getElementById('packingEndpoint').value.trim();
-        
+
         if (!packingEndpoint) {
             this.showToast('Vui lòng cấu hình endpoint thuật toán packing trước', 'warning');
             return;
         }
-        
+
         // Show brief processing toast instead of modal
         this.showProcessingToast('Processing packing algorithm...');
-        
+
         try {
             console.log('Starting packing request...');
             const requestData = {
@@ -966,9 +984,9 @@ class BinPackingVisualizer {
                 };
                 console.log('Sending weights with request:', currentWeights);
             }
-            
+
             console.log('Request data:', requestData);
-            
+
             const response = await fetch('/pack', {
                 method: 'POST',
                 headers: {
@@ -976,47 +994,47 @@ class BinPackingVisualizer {
                 },
                 body: JSON.stringify(requestData)
             });
-            
+
             console.log('Response received, parsing JSON...');
             const result = await response.json();
             console.log('Packing result:', result);
-            
+
             if (!result.success) {
                 this.showToast(`Packing failed: ${result.message}`, 'danger');
                 return;
             }
-            
+
             console.log('Setting packed results...');
             this.packedResults = result;
-            
+
             // Process results immediately without blocking UI
             setTimeout(() => {
                 try {
                     console.log('Starting visualization...');
                     this.visualizePacking();
-                    
+
                     console.log('Updating stats...');
                     this.updateStats();
-                    
+
                     console.log('Initializing step controls...');
                     this.initializeStepControls();
-                    
+
                     console.log('Displaying items info...');
                     this.displayItemsInfo(result.packed_items || [], result.leftover_items || []);
-                    
+
                     console.log('Enabling export...');
                     document.getElementById('exportResults').disabled = false;
-                    
+
                     console.log('Showing success message...');
                     this.showToast('Packing completed successfully!', 'success');
-                    
+
                     console.log('All processing completed.');
                 } catch (error) {
                     console.error('Visualization error:', error);
                     this.showToast('Error rendering visualization. Please try again.', 'danger');
                 }
             }, 10);
-            
+
         } catch (error) {
             console.error('Packing error:', error);
             this.showToast(`Network error: ${error.message}`, 'danger');
@@ -1032,32 +1050,32 @@ class BinPackingVisualizer {
             z: this.binSize.height / maxDim
         };
     }
-    
+
     initializePlot() {
         const data = [];
-        
+
         // Create warehouse outline
         const warehouseOutline = this.createWarehouseOutline();
         data.push(warehouseOutline);
 
         const aspectRatio = this.calculateAspectRatio();
-        
+
         const layout = {
             scene: {
-                xaxis: { 
-                    title: 'Length', 
+                xaxis: {
+                    title: 'Length',
                     range: [0, this.binSize.length],
                     showgrid: true,
                     gridcolor: '#E0E0E0'
                 },
-                yaxis: { 
-                    title: 'Width', 
+                yaxis: {
+                    title: 'Width',
                     range: [0, this.binSize.width],
                     showgrid: true,
                     gridcolor: '#E0E0E0'
                 },
-                zaxis: { 
-                    title: 'Height', 
+                zaxis: {
+                    title: 'Height',
                     range: [0, this.binSize.height],
                     showgrid: true,
                     gridcolor: '#E0E0E0'
@@ -1077,42 +1095,42 @@ class BinPackingVisualizer {
             paper_bgcolor: 'transparent',
             showlegend: false
         };
-        
+
         const config = {
             responsive: true,
             displayModeBar: true,
             modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'autoScale2d'],
             displaylogo: false
         };
-        
+
         Plotly.newPlot('plot3d', data, layout, config);
     }
-    
+
     createWarehouseOutline() {
         const { length, width, height } = this.binSize;
-        
+
         // Define the 8 vertices of the warehouse
         const vertices = [
             [0, 0, 0], [length, 0, 0], [length, width, 0], [0, width, 0],  // bottom
             [0, 0, height], [length, 0, height], [length, width, height], [0, width, height]  // top
         ];
-        
+
         // Define the 12 edges
         const edges = [
             [0, 1], [1, 2], [2, 3], [3, 0],  // bottom edges
             [4, 5], [5, 6], [6, 7], [7, 4],  // top edges
             [0, 4], [1, 5], [2, 6], [3, 7]   // vertical edges
         ];
-        
+
         const x = [], y = [], z = [];
-        
+
         edges.forEach(edge => {
             const [start, end] = edge;
             x.push(vertices[start][0], vertices[end][0], null);
             y.push(vertices[start][1], vertices[end][1], null);
             z.push(vertices[start][2], vertices[end][2], null);
         });
-        
+
         return {
             type: 'scatter3d',
             mode: 'lines',
@@ -1126,95 +1144,45 @@ class BinPackingVisualizer {
             name: 'Warehouse'
         };
     }
-    
-    visualizePacking() {
-        if (!this.packedResults) return;
-        
-        const data = [];
-        
-        // Add warehouse outline
-        data.push(this.createWarehouseOutline());
-        
-        // Color palette for items
-        const colors = [
-            '#FF6B35', '#F7931E', '#FFD23F', '#06FFA5',
-            '#A8E6CF', '#FFB3BA', '#FFDFBA', '#FFFFBA',
-            '#BAE1FF', '#DDA0DD', '#98FB98', '#F0E68C'
-        ];
-        
-        // Show all packed items (no limit to match visualization only mode)
-        const packedItems = this.packedResults.packed_items || [];
-        
-        // Add placed items
-        packedItems.forEach((item, index) => {
-            const color = colors[index % colors.length];
-            const itemMesh = this.createItemMesh(item, color);
-            data.push(itemMesh);
-        });
 
-        const aspectRatio = this.calculateAspectRatio();
-        
-        // Update plot
-        const layout = {
-            scene: {
-                xaxis: { 
-                    title: 'Length', 
-                    range: [0, this.binSize.length],
-                    showgrid: true,
-                    gridcolor: '#E0E0E0'
-                },
-                yaxis: { 
-                    title: 'Width', 
-                    range: [0, this.binSize.width],
-                    showgrid: true,
-                    gridcolor: '#E0E0E0'
-                },
-                zaxis: { 
-                    title: 'Height', 
-                    range: [0, this.binSize.height],
-                    showgrid: true,
-                    gridcolor: '#E0E0E0'
-                },
-                bgcolor: '#F8F9FA',
-                camera: {
-                    eye: { x: 1.5 * aspectRatio.x, y: 1.5 * aspectRatio.y, z: 1.5 * aspectRatio.z }
-                },
-                aspectmode: 'manual',
-                aspectratio: {
-                    x: aspectRatio.x,
-                    y: aspectRatio.y,
-                    z: aspectRatio.z
-                }
-            },
-            margin: { l: 0, r: 0, b: 0, t: 0 },
-            paper_bgcolor: 'transparent',
-            showlegend: false
-        };
-        
-        
-        Plotly.react('plot3d', data, layout);
-        
-        // Add click event for item details
-        document.getElementById('plot3d').on('plotly_click', (eventData) => {
-            if (eventData.points[0] && eventData.points[0].customdata) {
-                this.showItemDetails(eventData.points[0].customdata);
-            }
-        });
-    }
-    
     createItemMesh(item, color) {
         const { x, y, z, length, width, height } = item;
 
         // Define the 8 vertices of the box
         const vertices = [
-            [x, y, z], [x + length, y, z], [x + length, y + width, z], [x, y + width, z],
-            [x, y, z + height], [x + length, y, z + height], [x + length, y + width, z + height], [x, y + width, z + height]
+            [x, y, z],                          // 0: bottom-front-left
+            [x + length, y, z],                 // 1: bottom-front-right
+            [x + length, y + width, z],         // 2: bottom-back-right
+            [x, y + width, z],                  // 3: bottom-back-left
+            [x, y, z + height],                 // 4: top-front-left
+            [x + length, y, z + height],        // 5: top-front-right
+            [x + length, y + width, z + height], // 6: top-back-right
+            [x, y + width, z + height]          // 7: top-back-left
         ];
 
-        // Define faces for a solid box (each face as two triangles)
-        const i = [0, 0, 1, 2, 2, 3, 3, 0, 4, 5, 1, 0];
-        const j = [1, 2, 2, 6, 3, 7, 0, 4, 5, 6, 5, 5];
-        const k = [2, 3, 5, 5, 6, 6, 7, 7, 7, 7, 0, 4];
+        // Define proper triangular faces with correct winding order (counter-clockwise)
+        const faces = [
+            // Bottom face (z = z) - normal pointing down
+            [0, 1, 2], [0, 2, 3],
+            // Top face (z = z + height) - normal pointing up
+            [4, 7, 6], [4, 6, 5],
+            // Front face (y = y) - normal pointing forward
+            [0, 4, 5], [0, 5, 1],
+            // Back face (y = y + width) - normal pointing backward
+            [2, 6, 7], [2, 7, 3],
+            // Left face (x = x) - normal pointing left
+            [0, 3, 7], [0, 7, 4],
+            // Right face (x = x + length) - normal pointing right
+            [1, 5, 6], [1, 6, 2]
+        ];
+
+        // Extract i, j, k arrays for mesh3d
+        const i = [], j = [], k = [];
+        faces.forEach(face => {
+            i.push(face[0]);
+            j.push(face[1]);
+            k.push(face[2]);
+        });
 
         const x_coords = vertices.map(v => v[0]);
         const y_coords = vertices.map(v => v[1]);
@@ -1229,7 +1197,19 @@ class BinPackingVisualizer {
             j: j,
             k: k,
             color: color,
-            opacity: 1.0, // Đặt opacity 0.5 cho khối đặc
+            opacity: 1.0,
+            lighting: {
+                ambient: 0.7,
+                diffuse: 1.0,
+                specular: 0.1,
+                roughness: 0.9,
+                fresnel: 0.1
+            },
+            lightposition: {
+                x: 100,
+                y: 200,
+                z: 0
+            },
             customdata: item,
             hovertemplate: `
                 <b>Item #${item.id}</b><br>
@@ -1246,11 +1226,11 @@ class BinPackingVisualizer {
             flatshading: true
         };
     }
-    
+
     showItemDetails(item) {
         const detailsPanel = document.getElementById('detailsPanel');
         const detailsContent = document.getElementById('detailsContent');
-        
+
         detailsContent.innerHTML = `
             <div class="row">
                 <div class="col-md-6">
@@ -1275,41 +1255,45 @@ class BinPackingVisualizer {
                 </div>
             </div>
         `;
-        
+
         detailsPanel.style.display = 'block';
         detailsPanel.classList.add('fade-in');
     }
-    
+
     updateStats() {
         const placedBadge = document.getElementById('placedBadge');
         const leftoverBadge = document.getElementById('leftoverBadge');
         const utilizationBadge = document.getElementById('utilizationBadge');
-        
+        const trainingScoreBadge = document.getElementById('trainingScoreBadge');
+
         if (this.packedResults) {
             const placed = (this.packedResults.packed_items || []).length;
             const leftover = (this.packedResults.leftover_items || []).length;
             const utilization = Math.round((this.packedResults.utilization || 0) * 100);
-            
-            placedBadge.innerHTML = `<i class="fas fa-check-circle me-1"></i>Placed: ${placed}`;
+            const trainingScore = (this.packedResults.training_score || 0).toFixed(4);
+
+            placedBadge.innerHTML = `<i class="fas fa-check-circle me-1"></i>Packed: ${placed}`;
             leftoverBadge.innerHTML = `<i class="fas fa-exclamation-circle me-1"></i>Leftover: ${leftover}`;
             utilizationBadge.innerHTML = `<i class="fas fa-chart-pie me-1"></i>Utilization: ${utilization}%`;
+            trainingScoreBadge.innerHTML = `<i class="fas fa-brain me-1"></i>Training Score: ${trainingScore}`;
         } else {
-            placedBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i>Placed: 0';
+            placedBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i>Packed: 0';
             leftoverBadge.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i>Leftover: 0';
             utilizationBadge.innerHTML = '<i class="fas fa-chart-pie me-1"></i>Utilization: 0%';
+            trainingScoreBadge.innerHTML = '<i class="fas fa-brain me-1"></i>Training Score: 0.0000';
         }
     }
-    
+
     updateWarehouseDisplay() {
         this.initializePlot();
     }
-    
+
     async exportResults() {
         if (!this.packedResults) {
             this.showToast('No packing results to export', 'warning');
             return;
         }
-        
+
         try {
             // Send results to server for proper formatting
             const response = await fetch('/export_results', {
@@ -1322,14 +1306,14 @@ class BinPackingVisualizer {
                     bin_size: this.binSize
                 })
             });
-            
+
             const result = await response.json();
-            
+
             if (!result.success) {
                 this.showToast(`Export failed: ${result.message}`, 'danger');
                 return;
             }
-            
+
             console.log('Creating blob and download...', result.export_data);
             const blob = new Blob([JSON.stringify(result.export_data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -1338,18 +1322,18 @@ class BinPackingVisualizer {
             a.download = `packing_results_${Date.now()}.json`;
             a.style.display = 'none';
             document.body.appendChild(a);
-            
+
             console.log('Triggering download...', a.download);
             a.click();
-            
+
             // Clean up after a short delay
             setTimeout(() => {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
             }, 1000);
-            
+
             this.showToast('Results exported successfully!', 'success');
-            
+
         } catch (error) {
             this.showToast(`Export failed: ${error.message}`, 'danger');
         }
@@ -1362,7 +1346,7 @@ class BinPackingVisualizer {
             const exportData = {
                 ...this.originalInputData
             };
-            
+
             console.log('Creating original file export blob...', exportData);
             const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -1371,16 +1355,16 @@ class BinPackingVisualizer {
             a.download = `original_input_file_${Date.now()}.json`;
             a.style.display = 'none';
             document.body.appendChild(a);
-            
+
             console.log('Triggering original file download...', a.download);
             a.click();
-            
+
             // Clean up after a short delay
             setTimeout(() => {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
             }, 1000);
-            
+
             this.showToast('Original input file exported successfully!', 'success');
         } else {
             // Fallback to current items export if no original file
@@ -1393,7 +1377,7 @@ class BinPackingVisualizer {
             this.showToast('No items to export', 'warning');
             return;
         }
-        
+
         try {
             // Send items to server for proper formatting
             const response = await fetch('/export_items', {
@@ -1406,14 +1390,14 @@ class BinPackingVisualizer {
                     bin_size: this.binSize
                 })
             });
-            
+
             const result = await response.json();
-            
+
             if (!result.success) {
                 this.showToast(`Export failed: ${result.message}`, 'danger');
                 return;
             }
-            
+
             console.log('Creating items export blob...', result.export_data);
             const blob = new Blob([JSON.stringify(result.export_data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -1422,23 +1406,23 @@ class BinPackingVisualizer {
             a.download = `items_list_${Date.now()}.json`;
             a.style.display = 'none';
             document.body.appendChild(a);
-            
+
             console.log('Triggering items download...', a.download);
             a.click();
-            
+
             // Clean up after a short delay
             setTimeout(() => {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
             }, 1000);
-            
+
             this.showToast('Items list exported successfully!', 'success');
-            
+
         } catch (error) {
             this.showToast(`Export failed: ${error.message}`, 'danger');
         }
     }
-    
+
     resetAll() {
         this.items = [];
         this.packedResults = null;
@@ -1446,8 +1430,10 @@ class BinPackingVisualizer {
         this.currentStepIndex = -1;
         this.nextItemId = 1;
         this.originalInputData = null; // Clear original input data
+        this.weights = {}; // Reset weights
+        this.currentWeights = {}; // Reset editable weights
         this.pauseAnimation();
-        
+
         // Reset form values
         document.getElementById('binLength').value = 10;
         document.getElementById('binWidth').value = 10;
@@ -1459,20 +1445,24 @@ class BinPackingVisualizer {
         document.getElementById('itemQuantity').value = 1;
         document.getElementById('itemNumberAxis').value = 2;
         document.getElementById('jsonFile').value = '';
-        
+        document.getElementById('visualizeFile').value = ''; // Clear visualize file input
+        document.getElementById('trainingFile').value = ''; // Clear training file input
+        document.getElementById('trainingEndpoint').value = ''; // Clear training endpoint
+
         this.binSize = { length: 10, width: 10, height: 10 };
         this.updateBinSize();
         this.updateItemsList();
         this.updateStats();
         this.initializePlot();
-        
+        this.hideWeights(); // Hide weights section after reset
+
         document.getElementById('exportResults').disabled = true;
         document.getElementById('exportItemsList').disabled = this.items.length === 0;
         document.getElementById('stepControlPanel').style.display = 'none';
-        
+
         this.showToast('All data reset to default values', 'info');
     }
-    
+
     showToast(message, type = 'info') {
         // Create toast container if it doesn't exist
         let toastContainer = document.getElementById('toastContainer');
@@ -1483,7 +1473,7 @@ class BinPackingVisualizer {
             toastContainer.style.zIndex = '9999';
             document.body.appendChild(toastContainer);
         }
-        
+
         // Create toast element
         const toastId = 'toast_' + Date.now();
         const bgClass = {
@@ -1492,7 +1482,7 @@ class BinPackingVisualizer {
             warning: 'bg-warning',
             info: 'bg-info'
         }[type] || 'bg-info';
-        
+
         const toastHtml = `
             <div id="${toastId}" class="toast align-items-center text-white ${bgClass} border-0" role="alert">
                 <div class="d-flex">
@@ -1504,20 +1494,20 @@ class BinPackingVisualizer {
                 </div>
             </div>
         `;
-        
+
         toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-        
+
         // Show toast
         const toastElement = document.getElementById(toastId);
         const toast = new bootstrap.Toast(toastElement, { delay: 4000 });
         toast.show();
-        
+
         // Remove from DOM after hiding
         toastElement.addEventListener('hidden.bs.toast', () => {
             toastElement.remove();
         });
     }
-    
+
     showProcessingToast(message) {
         // Create toast container if it doesn't exist
         let toastContainer = document.getElementById('toastContainer');
@@ -1528,7 +1518,7 @@ class BinPackingVisualizer {
             toastContainer.style.zIndex = '9999';
             document.body.appendChild(toastContainer);
         }
-        
+
         // Create small processing toast
         const toastId = 'processing_toast_' + Date.now();
         const toastHtml = `
@@ -1543,23 +1533,23 @@ class BinPackingVisualizer {
                 </div>
             </div>
         `;
-        
+
         toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-        
+
         // Show toast with short delay (auto-hide in 1.5 seconds)
         const toastElement = document.getElementById(toastId);
         const toast = new bootstrap.Toast(toastElement, { delay: 1500 });
         toast.show();
-        
+
         // Remove from DOM after hiding
         toastElement.addEventListener('hidden.bs.toast', () => {
             toastElement.remove();
         });
-        
+
         // Return toast ID for manual hiding if needed
         return toastId;
     }
-    
+
     getToastIcon(type) {
         const icons = {
             success: 'check-circle',
@@ -1569,35 +1559,35 @@ class BinPackingVisualizer {
         };
         return icons[type] || 'info-circle';
     }
-    
+
     // Step-by-step visualization methods
     initializeStepControls() {
-        if (!this.packedResults || !this.packedResults.packing_steps) {
+        if (!this.packedResults || !this.packedResults.packing_steps || this.packedResults.packing_steps.length === 0) {
             document.getElementById('stepControlPanel').style.display = 'none';
             return;
         }
-        
+
         this.packingSteps = this.packedResults.packing_steps;
         this.currentStepIndex = -1;
-        
+
         document.getElementById('stepControlPanel').style.display = 'block';
         document.getElementById('totalSteps').textContent = this.packingSteps.length;
         document.getElementById('currentStep').textContent = '0';
         document.getElementById('stepDescription').textContent = 'Ready to start';
         document.getElementById('stepProgressBar').style.width = '0%';
-        
+
         // Enable/disable buttons
         document.getElementById('prevStep').disabled = true;
         document.getElementById('nextStep').disabled = this.packingSteps.length === 0;
-        
+
         // Reset play state
         this.isPlaying = false;
         this.updatePlayPauseButton();
-        
+
         // Initialize with empty warehouse
         this.showStepVisualization(-1);
     }
-    
+
     previousStep() {
         if (this.currentStepIndex > -1) {
             this.currentStepIndex--;
@@ -1605,7 +1595,7 @@ class BinPackingVisualizer {
             this.updateStepControls();
         }
     }
-    
+
     nextStep() {
         if (this.currentStepIndex < this.packingSteps.length - 1) {
             this.currentStepIndex++;
@@ -1613,23 +1603,23 @@ class BinPackingVisualizer {
             this.updateStepControls();
         }
     }
-    
-    togglePlayPause() {
+
+    togglePlayPauseSteps() { // Renamed to avoid conflict with global togglePlayPause
         if (this.isPlaying) {
             this.pauseAnimation();
         } else {
             this.playAnimation();
         }
     }
-    
+
     playAnimation() {
         if (this.currentStepIndex >= this.packingSteps.length - 1) {
             this.currentStepIndex = -1; // Start from beginning
         }
-        
+
         this.isPlaying = true;
         this.updatePlayPauseButton();
-        
+
         this.playInterval = setInterval(() => {
             if (this.currentStepIndex < this.packingSteps.length - 1) {
                 this.nextStep();
@@ -1638,21 +1628,21 @@ class BinPackingVisualizer {
             }
         }, this.stepSpeed);
     }
-    
+
     pauseAnimation() {
         this.isPlaying = false;
         this.updatePlayPauseButton();
-        
+
         if (this.playInterval) {
             clearInterval(this.playInterval);
             this.playInterval = null;
         }
     }
-    
+
     updatePlayPauseButton() {
         const button = document.getElementById('playPause');
         const icon = button.querySelector('i');
-        
+
         if (this.isPlaying) {
             icon.className = 'fas fa-pause me-2';
             button.innerHTML = '<i class="fas fa-pause me-2"></i>Pause';
@@ -1661,61 +1651,61 @@ class BinPackingVisualizer {
             button.innerHTML = '<i class="fas fa-play me-2"></i>Play';
         }
     }
-    
-    updateStepSpeed() {
-        this.stepSpeed = parseInt(document.getElementById('stepSpeed').value);
+
+    updateStepSpeed(value) { // Accept value directly
+        this.stepSpeed = parseInt(value);
         document.getElementById('speedValue').textContent = this.stepSpeed + 'ms';
-        
+
         // If playing, restart with new speed
         if (this.isPlaying) {
             this.pauseAnimation();
             this.playAnimation();
         }
     }
-    
+
     updateStepControls() {
         const currentStepNum = this.currentStepIndex + 1;
         document.getElementById('currentStep').textContent = currentStepNum;
-        
+
         // Update progress bar
-        const progress = this.packingSteps.length > 0 ? 
+        const progress = this.packingSteps.length > 0 ?
             (currentStepNum / this.packingSteps.length) * 100 : 0;
         document.getElementById('stepProgressBar').style.width = progress + '%';
-        
+
         // Update description
         if (this.currentStepIndex === -1) {
             document.getElementById('stepDescription').textContent = 'Ready to start';
         } else if (this.currentStepIndex < this.packingSteps.length) {
             const step = this.packingSteps[this.currentStepIndex];
-            document.getElementById('stepDescription').textContent = 
+            document.getElementById('stepDescription').textContent =
                 step.description || `Placing Item #${step.item_id} (Order: ${step.step}) at (${step.position.x}, ${step.position.y}, ${step.position.z})`;
         }
-        
+
         // Update button states
         document.getElementById('prevStep').disabled = this.currentStepIndex <= -1;
         document.getElementById('nextStep').disabled = this.currentStepIndex >= this.packingSteps.length - 1;
     }
-    
+
     showStepVisualization(stepIndex) {
         const data = [];
-        
+
         // Add warehouse outline
         data.push(this.createWarehouseOutline());
-        
+
         // Color palette for items
         const colors = [
             '#FF6B35', '#F7931E', '#FFD23F', '#06FFA5',
             '#A8E6CF', '#FFB3BA', '#FFDFBA', '#FFFFBA',
             '#BAE1FF', '#DDA0DD', '#98FB98', '#F0E68C'
         ];
-        
+
         // Show items up to the current step
         if (stepIndex >= 0 && this.packedResults && this.packedResults.packed_items) {
             // Lấy các items đã pack đến step hiện tại (dựa trên pack_order)
-            const itemsToShow = this.packedResults.packed_items.filter(item => 
+            const itemsToShow = this.packedResults.packed_items.filter(item =>
                 item.pack_order && item.pack_order <= stepIndex + 1
             );
-            
+
             itemsToShow.forEach((item, index) => {
                 const color = colors[item.pack_order % colors.length];
                 const itemMesh = this.createItemMesh(item, color);
@@ -1724,24 +1714,24 @@ class BinPackingVisualizer {
         }
 
         const aspectRatio = this.calculateAspectRatio();
-        
+
         // Update plot
         const layout = {
             scene: {
-                xaxis: { 
-                    title: 'Length', 
+                xaxis: {
+                    title: 'Length',
                     range: [0, this.binSize.length],
                     showgrid: true,
                     gridcolor: '#E0E0E0'
                 },
-                yaxis: { 
-                    title: 'Width', 
+                yaxis: {
+                    title: 'Width',
                     range: [0, this.binSize.width],
                     showgrid: true,
                     gridcolor: '#E0E0E0'
                 },
-                zaxis: { 
-                    title: 'Height', 
+                zaxis: {
+                    title: 'Height',
                     range: [0, this.binSize.height],
                     showgrid: true,
                     gridcolor: '#E0E0E0'
@@ -1761,22 +1751,20 @@ class BinPackingVisualizer {
             paper_bgcolor: 'transparent',
             showlegend: false
         };
-        
-        
+
+
         Plotly.react('plot3d', data, layout);
     }
-    
+
     // JSON Structure Modal methods
     showJsonStructure() {
         this.jsonStructureModal.show();
     }
-    
-    // JSON format toggle removed - only using new format now
-    
+
     copyJsonExample() {
         const activeExample = document.getElementById('jsonExampleNew');
         const jsonText = activeExample.textContent;
-        
+
         if (navigator.clipboard && window.isSecureContext) {
             navigator.clipboard.writeText(jsonText).then(() => {
                 this.showToast('JSON example copied to clipboard!', 'success');
@@ -1787,7 +1775,7 @@ class BinPackingVisualizer {
             this.fallbackCopyToClipboard(jsonText);
         }
     }
-    
+
     fallbackCopyToClipboard(text) {
         const textArea = document.createElement('textarea');
         textArea.value = text;
@@ -1796,17 +1784,17 @@ class BinPackingVisualizer {
         document.body.appendChild(textArea);
         textArea.focus();
         textArea.select();
-        
+
         try {
             document.execCommand('copy');
             this.showToast('JSON example copied to clipboard!', 'success');
         } catch (err) {
             this.showToast('Failed to copy to clipboard. Please copy manually.', 'warning');
         }
-        
+
         document.body.removeChild(textArea);
     }
-    
+
     downloadJsonExample() {
         const exampleData = {
             "items": [
@@ -1832,7 +1820,7 @@ class BinPackingVisualizer {
             }
         };
         const filename = 'bin_packing_example.json';
-        
+
         const blob = new Blob([JSON.stringify(exampleData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1842,95 +1830,250 @@ class BinPackingVisualizer {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
+
         this.showToast('Example JSON file downloaded!', 'success');
     }
 
-    displayWeights(weights) {
-        const weightsCard = document.getElementById('weightsCard');
-        const weightsDisplay = document.getElementById('weightsDisplay');
-        
-        if (typeof weights === 'object' && weights !== null && !Array.isArray(weights)) {
-            // New object format - display as editable list
-            let html = '<div class="list-group list-group-flush">';
-            
-            Object.entries(weights).forEach(([key, value]) => {
-                html += `
-                    <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                        <span class="text-dark fw-medium">${key}</span>
-                        <div class="d-flex align-items-center gap-2">
-                            <input type="number" 
-                                   class="form-control form-control-sm weight-input" 
-                                   data-weight-key="${key}"
-                                   value="${value}" 
-                                   step="0.1" 
-                                   style="width: 80px;">
-                        </div>
+    // Weights display and update methods
+    showWeights(weights) {
+        const section = document.getElementById('weightsSection');
+        const display = document.getElementById('weightsDisplay');
+
+        if (!weights || Object.keys(weights).length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+
+        const weightsHtml = Object.entries(weights).map(([key, value]) => {
+            const keyDisplay = key.replace('W_', '').replace(/_/g, ' ').toUpperCase();
+            return `
+                <div class="row mb-2 align-items-center">
+                    <div class="col-6">
+                        <label class="form-label fw-bold small mb-0">${keyDisplay}</label>
                     </div>
-                `;
-            });
-            
-            html += '</div>';
-            weightsDisplay.innerHTML = html;
-            
-            // Store initial weights  
-            this.currentWeights = {...weights};
-            
-            // Add event listeners for weight changes
-            this.attachWeightChangeListeners();
-        } else if (Array.isArray(weights)) {
-            // Legacy array format - show simplified view
-            weightsDisplay.innerHTML = `
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    <strong>Legacy weights format detected</strong><br>
-                    Array with ${weights.length} values: [${weights.slice(0, 3).join(', ')}${weights.length > 3 ? ', ...' : ''}]
+                    <div class="col-6">
+                        <input type="text" class="form-control form-control-sm weight-input"
+                               data-weight="${key}" value="${value}" placeholder="Enter value">
+                    </div>
                 </div>
             `;
-        }
-        
-        weightsCard.style.display = 'block';
+        }).join('');
+
+        display.innerHTML = weightsHtml;
+
+        // Add event listeners for weight changes
+        document.querySelectorAll('.weight-input').forEach(input => {
+            input.addEventListener('change', (e) => {
+                const weightKey = e.target.dataset.weight;
+                const newValue = parseFloat(e.target.value); // Use parseFloat for numeric weights
+                this.updateWeight(weightKey, newValue);
+            });
+        });
     }
 
     hideWeights() {
-        const weightsCard = document.getElementById('weightsCard');
-        weightsCard.style.display = 'none';
+        const section = document.getElementById('weightsSection');
+        if (section) {
+            section.style.display = 'none';
+        }
     }
 
-    attachWeightChangeListeners() {
-        const weightInputs = document.querySelectorAll('.weight-input');
-        weightInputs.forEach(input => {
-            input.addEventListener('input', (e) => {
-                const key = e.target.dataset.weightKey;
-                const value = parseFloat(e.target.value) || 0;
-                
-                // Update current weights object
-                if (!this.currentWeights) {
-                    this.currentWeights = {};
-                }
-                this.currentWeights[key] = value;
-                
-                console.log(`Updated weight ${key} to ${value}`);
-            });
-        });
+    updateWeight(key, value) {
+        // Update internal weights object
+        if (!this.currentWeights) {
+            this.currentWeights = {};
+        }
+        this.currentWeights[key] = value;
+        console.log(`Updated weight ${key} to ${value}`);
     }
 
     getCurrentWeights() {
-        // Get current weights from UI inputs or stored weights
-        if (this.currentWeights) {
+        // Return current weights if they exist, otherwise try to parse from inputs
+        if (this.currentWeights && Object.keys(this.currentWeights).length > 0) {
             return this.currentWeights;
+        } else {
+            const weights = {};
+            document.querySelectorAll('.weight-input').forEach(input => {
+                const key = input.dataset.weight;
+                const value = parseFloat(input.value);
+                if (!isNaN(value)) {
+                    weights[key] = value;
+                }
+            });
+            return Object.keys(weights).length > 0 ? weights : null;
         }
-        
-        // If no current weights, try to get from inputs
-        const weights = {};
-        const weightInputs = document.querySelectorAll('.weight-input');
-        weightInputs.forEach(input => {
-            const key = input.dataset.weightKey;
-            const value = parseFloat(input.value) || 0;
-            weights[key] = value;
-        });
-        
-        return Object.keys(weights).length > 0 ? weights : null;
+    }
+
+
+    async runTraining() {
+        const fileInput = document.getElementById('trainingFile');
+        const file = fileInput.files[0];
+        const endpoint = document.getElementById('trainingEndpoint').value;
+
+        if (!file) {
+            this.showToast('Please select a training data file', 'warning');
+            return;
+        }
+
+        if (!endpoint) {
+            this.showToast('Please enter training endpoint URL', 'warning');
+            return;
+        }
+
+        try {
+            const text = await file.text();
+            const trainingData = JSON.parse(text);
+
+            this.showProcessingToast('Starting algorithm training...');
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(trainingData)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Training failed: ${response.status} ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log('Training result:', result);
+
+            // Update weights with best_weights from training result
+            if (result.best_weights) {
+                this.weights = result.best_weights; // Store the best weights
+                this.currentWeights = {...result.best_weights}; // Update editable weights
+                this.showWeights(this.currentWeights); // Display updated weights
+                this.showToast(`Training completed! Best efficiency: ${(result.best_average_efficiency * 100).toFixed(2)}%`, 'success');
+            } else {
+                this.showToast('Training completed but no weights returned', 'warning');
+            }
+
+        } catch (error) {
+            console.error('Training error:', error);
+            this.showToast(`Training failed: ${error.message}`, 'danger');
+        }
+    }
+
+    async checkTrainingEndpoint() {
+        const endpoint = document.getElementById('trainingEndpoint').value;
+        const statusDiv = document.getElementById('trainingEndpointStatus');
+
+        if (!endpoint) {
+            statusDiv.innerHTML = '<small class="text-warning">Please enter endpoint URL</small>';
+            return;
+        }
+
+        try {
+            statusDiv.innerHTML = '<small class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Checking...</small>';
+
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                }
+            });
+
+            if (response.ok) {
+                statusDiv.innerHTML = '<small class="text-success"><i class="fas fa-check-circle me-1"></i>Training endpoint is accessible</small>';
+            } else {
+                statusDiv.innerHTML = '<small class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>Endpoint responded but may not be ready</small>';
+            }
+        } catch (error) {
+            statusDiv.innerHTML = '<small class="text-danger"><i class="fas fa-times-circle me-1"></i>Cannot reach training endpoint</small>';
+        }
+    }
+
+    showTrainingFormat() {
+        const modalHtml = `
+            <div class="modal fade" id="trainingFormatModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content border-0 shadow-lg">
+                        <div class="modal-header bg-warning text-dark">
+                            <h5 class="modal-title">
+                                <i class="fas fa-dumbbell me-2"></i>
+                                Training Data Format
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <h6 class="text-warning">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    Training Data Format
+                                </h6>
+                                <p class="text-muted mb-3">
+                                    Use this JSON structure for training the algorithm:
+                                </p>
+                            </div>
+                            <div class="position-relative">
+                                <pre class="bg-light p-3 border rounded" style="font-size: 0.9rem; overflow-x: auto;">
+{
+  "training_data": [
+    {
+      "items": [
+        {
+          "id": 0,
+          "request_id": 0,
+          "L": 1830,
+          "W": 2370,
+          "H": 2470,
+          "num_axis": 2,
+          "quantity": 1
+        }
+      ],
+      "bin_size": {
+        "L": 9590,
+        "W": 2390,
+        "H": 2570
+      },
+      "parameters": {
+        "stack_rule": [100, 100, 100],
+        "lifo_order": [0, 0, 0]
+      }
+    }
+  ],
+  "algorithm_weights": {
+    "W_lifo": 1.0,
+    "W_sim_l": 1.0,
+    "W_sim_w": 1.0,
+    "W_sim_h": 1.0,
+    "W_leftover_l_ratio": 1.0,
+    "W_leftover_w_ratio": 1.0,
+    "W_packable_l": 1.0,
+    "W_packable_w": 1.0,
+    "W_max_l": 1000.0,
+    "W_size_score": 3.299999952316284
+  },
+  "training_config": {
+    "num_steps": 2,
+    "max_change": 0.1
+  }
+}</pre>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        const existing = document.getElementById('trainingFormatModal');
+        if (existing) existing.remove();
+
+        // Add modal to body
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('trainingFormatModal'));
+        modal.show();
     }
 }
 
