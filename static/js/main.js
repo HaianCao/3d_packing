@@ -17,7 +17,7 @@ class BinPackingVisualizer {
         this.stepSpeed = 1000; // ms
 
         // Algorithm weights and training
-        this.weights = {}; // Store current algorithm weights
+        this.weights = {}; // Store original loaded algorithm weights
         this.currentWeights = {}; // Store editable weights
 
         this.init();
@@ -30,6 +30,7 @@ class BinPackingVisualizer {
         this.jsonStructureModal = new bootstrap.Modal(document.getElementById('jsonStructureModal'));
         this.initializePlot();
         this.hideWeights(); // Initially hide weights section
+        this.setupFormValidation(); // Setup form validation
     }
 
     initializeEventListeners() {
@@ -689,8 +690,28 @@ class BinPackingVisualizer {
         navigator.clipboard.writeText(JSON.stringify(example, null, 2)).then(() => {
             this.showToast('Visualization example copied to clipboard!', 'success');
         }).catch(() => {
-            this.showToast('Failed to copy to clipboard', 'danger');
+            this.fallbackCopyToClipboard(example);
         });
+    }
+
+    fallbackCopyToClipboard(example) {
+        const text = JSON.stringify(example, null, 2);
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+            document.execCommand('copy');
+            this.showToast('Visualization example copied to clipboard!', 'success');
+        } catch (err) {
+            this.showToast('Failed to copy to clipboard. Please copy manually.', 'warning');
+        }
+
+        document.body.removeChild(textArea);
     }
 
     downloadVisualizationExample() {
@@ -1568,24 +1589,21 @@ class BinPackingVisualizer {
         }
 
         this.packingSteps = this.packedResults.packing_steps;
-        this.currentStepIndex = -1;
+        // Start at the final step instead of beginning
+        this.currentStepIndex = this.packingSteps.length - 1;
 
         document.getElementById('stepControlPanel').style.display = 'block';
         document.getElementById('totalSteps').textContent = this.packingSteps.length;
-        document.getElementById('currentStep').textContent = '0';
-        document.getElementById('stepDescription').textContent = 'Ready to start';
-        document.getElementById('stepProgressBar').style.width = '0%';
-
-        // Enable/disable buttons
-        document.getElementById('prevStep').disabled = true;
-        document.getElementById('nextStep').disabled = this.packingSteps.length === 0;
-
+        
+        // Update controls to show final step
+        this.updateStepControls();
+        
         // Reset play state
         this.isPlaying = false;
         this.updatePlayPauseButton();
 
-        // Initialize with empty warehouse
-        this.showStepVisualization(-1);
+        // Initialize with final step visualization (show all items packed)
+        this.showStepVisualization(this.currentStepIndex);
     }
 
     previousStep() {
@@ -1613,8 +1631,11 @@ class BinPackingVisualizer {
     }
 
     playAnimation() {
+        // If at final step, reset to beginning for animation
         if (this.currentStepIndex >= this.packingSteps.length - 1) {
             this.currentStepIndex = -1; // Start from beginning
+            this.showStepVisualization(this.currentStepIndex);
+            this.updateStepControls();
         }
 
         this.isPlaying = true;
@@ -1625,6 +1646,7 @@ class BinPackingVisualizer {
                 this.nextStep();
             } else {
                 this.pauseAnimation();
+                // Stay at final step after animation completes
             }
         }, this.stepSpeed);
     }
@@ -1677,8 +1699,12 @@ class BinPackingVisualizer {
             document.getElementById('stepDescription').textContent = 'Ready to start';
         } else if (this.currentStepIndex < this.packingSteps.length) {
             const step = this.packingSteps[this.currentStepIndex];
-            document.getElementById('stepDescription').textContent =
-                step.description || `Placing Item #${step.item_id} (Order: ${step.step}) at (${step.position.x}, ${step.position.y}, ${step.position.z})`;
+            if (this.currentStepIndex === this.packingSteps.length - 1) {
+                document.getElementById('stepDescription').textContent = 'Packing completed - All items packed';
+            } else {
+                document.getElementById('stepDescription').textContent =
+                    step.description || `Placing Item #${step.item_id} (Order: ${step.step}) at (${step.position.x}, ${step.position.y}, ${step.position.z})`;
+            }
         }
 
         // Update button states
@@ -1845,6 +1871,9 @@ class BinPackingVisualizer {
         }
 
         section.style.display = 'block';
+        this.weights = weights;
+        // Store current weights for editing
+        this.currentWeights = { ...weights };
 
         const weightsHtml = Object.entries(weights).map(([key, value]) => {
             const keyDisplay = key.replace('W_', '').replace(/_/g, ' ').toUpperCase();
@@ -1855,7 +1884,7 @@ class BinPackingVisualizer {
                     </div>
                     <div class="col-6">
                         <input type="text" class="form-control form-control-sm weight-input"
-                               data-weight="${key}" value="${value}" placeholder="Enter value">
+                               data-weight-key="${key}" value="${value}" placeholder="Enter value">
                     </div>
                 </div>
             `;
@@ -1866,9 +1895,9 @@ class BinPackingVisualizer {
         // Add event listeners for weight changes
         document.querySelectorAll('.weight-input').forEach(input => {
             input.addEventListener('change', (e) => {
-                const weightKey = e.target.dataset.weight;
-                const newValue = parseFloat(e.target.value); // Use parseFloat for numeric weights
-                this.updateWeight(weightKey, newValue);
+                const weightKey = e.target.dataset.weightKey;
+                const newValue = parseFloat(e.target.value);
+                this.onWeightChange(weightKey, newValue);
             });
         });
     }
@@ -1880,30 +1909,58 @@ class BinPackingVisualizer {
         }
     }
 
-    updateWeight(key, value) {
-        // Update internal weights object
-        if (!this.currentWeights) {
-            this.currentWeights = {};
-        }
-        this.currentWeights[key] = value;
+    onWeightChange(key, value) {
         console.log(`Updated weight ${key} to ${value}`);
+        // Initialize weights with defaults if not exists
+        if (!this.currentWeights) {
+            this.currentWeights = {
+                "W_lifo": 10.0,
+                "W_sim_l": -1.0,
+                "W_sim_w": -1.0,
+                "W_sim_h": 0.0,
+                "W_leftover_l_ratio": -5.0,
+                "W_leftover_w_ratio": -5.0,
+                "W_packable_l": -0.5,
+                "W_packable_w": -0.5,
+                "W_max_l": 1000.0,
+                "W_size_score": 3.299999952316284
+            };
+        }
+        this.currentWeights[key] = parseFloat(value);
     }
 
     getCurrentWeights() {
-        // Return current weights if they exist, otherwise try to parse from inputs
-        if (this.currentWeights && Object.keys(this.currentWeights).length > 0) {
-            return this.currentWeights;
-        } else {
-            const weights = {};
-            document.querySelectorAll('.weight-input').forEach(input => {
-                const key = input.dataset.weight;
-                const value = parseFloat(input.value);
-                if (!isNaN(value)) {
-                    weights[key] = value;
-                }
-            });
-            return Object.keys(weights).length > 0 ? weights : null;
+        // Return current weights from the weights display
+        const weightsDisplay = document.getElementById('weightsDisplay');
+        if (!weightsDisplay || weightsDisplay.innerHTML.includes('No weights available')) {
+            return null;
         }
+
+        // Always return complete weights object with all required keys
+        const weights = {
+            "W_lifo": 10.0,
+            "W_sim_l": -1.0,
+            "W_sim_w": -1.0,
+            "W_sim_h": 0.0,
+            "W_leftover_l_ratio": -5.0,
+            "W_leftover_w_ratio": -5.0,
+            "W_packable_l": -0.5,
+            "W_packable_w": -0.5,
+            "W_max_l": 1000.0,
+            "W_size_score": 3.299999952316284
+        };
+
+        // Update with current values from UI inputs
+        const weightInputs = weightsDisplay.querySelectorAll('input[data-weight-key]');
+        weightInputs.forEach(input => {
+            const key = input.getAttribute('data-weight-key');
+            const value = parseFloat(input.value);
+            if (!isNaN(value)) {
+                weights[key] = value;
+            }
+        });
+
+        return weights;
     }
 
 
@@ -2041,7 +2098,7 @@ class BinPackingVisualizer {
     "W_lifo": 1.0,
     "W_sim_l": 1.0,
     "W_sim_w": 1.0,
-    "W_sim_h": 1.0,
+    "W_sim_h": 0.0,
     "W_leftover_l_ratio": 1.0,
     "W_leftover_w_ratio": 1.0,
     "W_packable_l": 1.0,

@@ -4,6 +4,76 @@ import json
 import logging
 import requests
 from urllib.parse import urlparse
+import numpy as np
+
+def f(x, bin_size):
+    """Exponential decay function for area scoring"""
+    return 4 * x * (2 ** (-(x/bin_size)))
+
+def area_score_by_l(px, py, pz, l, w, h, bin_l, bin_w, bin_h):
+    """Calculate area score based on length dimension"""
+    return (f(px + l, bin_l) - f(px, bin_l)) * w * h
+
+def area_score_by_w(px, py, pz, l, w, h, bin_l, bin_w, bin_h):
+    """Calculate area score based on width dimension"""
+    return (f(py + w, bin_w) - f(py, bin_w)) * l * h
+
+def same_h_score(item_id, all_items):
+    """Calculate score for items with same height"""
+    if len(all_items) <= 1:
+        return 0.0
+        
+    score = 0.0
+    item = all_items[item_id]
+    px, py, pz = item['x'], item['y'], item['z']
+    l, w, h = get_rotation_by_id(item['original_length'], item['original_width'], item['original_height'], item.get('rotation_id', 0), True)
+    
+    for i, other_item in enumerate(all_items):
+        if i == item_id:
+            continue
+        x, y, z = other_item['x'], other_item['y'], other_item['z']
+        this_l, this_w, this_h = get_rotation_by_id(other_item['original_length'], other_item['original_width'], other_item['original_height'], other_item.get('rotation_id', 0), True)
+        
+        # Check if items have same top height
+        if abs((this_h + z) - (pz + h)) < 0.001:  # Using small epsilon for float comparison
+            score += 1.0
+    
+    return score / (len(all_items) - 1)
+
+def calculate_algorithm_training_score(packed_items, bin_l, bin_w, bin_h, lock_axis=True):
+    """Calculate training score using complex algorithm formula"""
+    if not packed_items or bin_l <= 0 or bin_w <= 0 or bin_h <= 0:
+        return 0.0
+    
+    total_score = 0.0
+    
+    for i, item in enumerate(packed_items):
+        r_id = item.get('rotation_id', 0)
+        px, py, pz = item['x'], item['y'], item['z']
+        
+        # Get rotated dimensions
+        l, w, h = get_rotation_by_id(
+            item['original_length'], 
+            item['original_width'], 
+            item['original_height'], 
+            r_id, 
+            lock_axis
+        )
+        
+        # Calculate area scores
+        area_score_l = area_score_by_l(px, py, pz, l, w, h, bin_l, bin_w, bin_h)
+        area_score_w = area_score_by_w(px, py, pz, l, w, h, bin_l, bin_w, bin_h)
+        area_score = (area_score_l + area_score_w) / 2.0  # Mean of area scores
+        
+        # Calculate same height score
+        same_height_score = same_h_score(i, packed_items)
+        
+        # Add to total score
+        total_score += area_score + same_height_score
+    
+    # Normalize by bin volume
+    return total_score / (bin_l * bin_w * bin_h)
+
 def get_rotation_by_id(l0, w0, h0, rotation_id, lock_axis):
     """
     Trả về (l, w, h) đã xoay tương ứng với rotation_id.
@@ -331,6 +401,11 @@ def pack_items():
                 # Utilization = volume used / total bin volume
                 utilization = packed_volume / bin_volume if bin_volume > 0 else 0
 
+                # Tính training score theo công thức algorithm phức tạp
+                training_score = 0.0
+                if packed_items:
+                    training_score = calculate_algorithm_training_score(packed_items, bin_length, bin_width, bin_height)
+
                 # Tạo packing steps từ packed_items theo thứ tự pack_order
                 packing_steps = []
                 for item in sorted(packed_items, key=lambda x: x['pack_order']):
@@ -375,6 +450,7 @@ def pack_items():
                         'height': bin_height
                     },
                     'utilization': utilization,
+                    'training_score': training_score,
                     'packing_time': end_time - start_time,
                     'external_result': result.get('metadata', {}),
                     'packing_steps': packing_steps  # Thêm packing steps cho step-by-step visualization
