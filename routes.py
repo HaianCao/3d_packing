@@ -1,5 +1,4 @@
-from flask import render_template, request, jsonify, flash
-from app import app
+from flask import render_template, request, jsonify, flash, current_app
 import json
 import logging
 import requests
@@ -109,12 +108,10 @@ def get_rotation_by_id(l0, w0, h0, rotation_id, lock_axis):
         else:
             return -1, -1, -1  # rotation_id vượt quá 5
 
-@app.route('/')
 def index():
     """Main page with 3D visualization interface"""
     return render_template('index.html')
 
-@app.route('/check_endpoint', methods=['POST'])
 def check_packing_endpoint():
     """Kiểm tra endpoint thuật toán packing có hoạt động không"""
     try:
@@ -181,7 +178,6 @@ def check_packing_endpoint():
         }), 500
 
 
-@app.route('/pack', methods=['POST'])
 def pack_items():
     """API endpoint for packing items - sử dụng external endpoint"""
     try:
@@ -487,7 +483,6 @@ def pack_items():
             'message': f'Server error: {str(e)}'
         }), 500
 
-@app.route('/pack_step_by_step', methods=['POST'])
 def pack_items_step_by_step():
     """API endpoint for step-by-step packing - trả về từng step một"""
     try:
@@ -684,7 +679,6 @@ def pack_items_step_by_step():
             'message': f'Server error: {str(e)}'
         }), 500
 
-@app.route('/get_step', methods=['POST'])
 def get_specific_step():
     """API endpoint để lấy step cụ thể từ algorithm"""
     try:
@@ -718,7 +712,6 @@ def get_specific_step():
             'message': f'Server error: {str(e)}'
         }), 500
 
-@app.route('/validate_json', methods=['POST'])
 def validate_json():
     """Validate uploaded JSON file"""
     try:
@@ -811,7 +804,6 @@ def validate_json():
             'message': f'Validation error: {str(e)}'
         }), 500
 
-@app.route('/visualize', methods=['POST'])
 def visualize_items():
     """API endpoint for visualizing items without packing"""
     try:
@@ -881,7 +873,6 @@ def visualize_items():
             'message': f'Visualization error: {str(e)}'
         }), 500
 
-@app.route('/export_items', methods=['POST'])
 def export_items():
     """Export current items list as JSON"""
     try:
@@ -931,7 +922,6 @@ def export_items():
             'message': f'Export error: {str(e)}'
         }), 500
 
-@app.route('/export_results', methods=['POST'])
 def export_results():
     """Export packing results as JSON"""
     try:
@@ -975,11 +965,23 @@ def export_results():
             'message': f'Export results error: {str(e)}'
         }), 500
 
-@app.errorhandler(404)
 def not_found(error):
     return render_template('index.html'), 404
 
-@app.errorhandler(500)
 def internal_error(error):
     logging.error(f"Internal server error: {str(error)}")
     return jsonify({'success': False, 'message': 'Internal server error'}), 500
+
+# Function to register all routes
+def register_routes(app):
+    app.add_url_rule('/', 'index', index)
+    app.add_url_rule('/check_endpoint', 'check_packing_endpoint', check_packing_endpoint, methods=['POST'])
+    app.add_url_rule('/pack', 'pack_items', pack_items, methods=['POST'])
+    app.add_url_rule('/pack_step_by_step', 'pack_items_step_by_step', pack_items_step_by_step, methods=['POST'])
+    app.add_url_rule('/get_step', 'get_specific_step', get_specific_step, methods=['POST'])
+    app.add_url_rule('/validate_json', 'validate_json', validate_json, methods=['POST'])
+    app.add_url_rule('/visualize', 'visualize_items', visualize_items, methods=['POST'])
+    app.add_url_rule('/export_items', 'export_items', export_items, methods=['POST'])
+    app.add_url_rule('/export_results', 'export_results', export_results, methods=['POST'])
+    app.register_error_handler(404, not_found)
+    app.register_error_handler(500, internal_error)
