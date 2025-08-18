@@ -195,12 +195,20 @@
                                         <div id="trainingEndpointStatus" class="mt-2"></div>
                                     </div>
                                     <div class="mb-3">
-                                        <label class="form-label fw-bold">Training Data File (Optional)</label>
+                                        <label class="form-label fw-bold">Training Data File</label>
                                         <input type="file" class="form-control" id="trainingFile" accept=".json">
-                                        <small class="text-muted">
-                                            Upload training data in format like training_example.json.<br>
-                                            If no file provided, current bin_size from interface will be used.
-                                        </small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Supplementary Data Files</label>
+                                        <input type="file" class="form-control" id="supplementaryFiles" accept=".txt,.json" multiple>
+                                        <div class="mt-2">
+                                            <div id="supplementaryFilesList" class="border rounded p-2" style="min-height: 50px; max-height: 200px; overflow-y: auto;">
+                                                <div class="text-muted">No supplementary files loaded</div>
+                                            </div>
+                                        </div>
+                                        <div id="supplementaryFilesList" class="mt-2">
+                                            <p class="text-muted">No supplementary files added yet.</p>
+                                        </div>
                                     </div>
                                     <div class="mb-3">
                                         <h6 class="text-info mb-2">
@@ -220,10 +228,7 @@
                                                 <input type="number" class="form-control form-control-sm" id="numFakeDataSamples" value="5" placeholder="5">
                                             </div>
                                         </div>
-                                        <small class="text-muted">
-                                            <i class="fas fa-info-circle me-1"></i>
-                                            These parameters control the training algorithm behavior
-                                        </small>
+                                        
                                     </div>
                                     <div class="d-grid gap-2 mb-3">
                                         <button class="btn btn-warning" id="runTraining">

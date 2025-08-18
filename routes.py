@@ -3,7 +3,6 @@ import json
 import logging
 import requests
 from urllib.parse import urlparse
-import numpy as np
 
 def f(x, bin_size):
     """Exponential decay function for area scoring"""
