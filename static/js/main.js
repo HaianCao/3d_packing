@@ -78,7 +78,7 @@ class BinPackingVisualizer {
         // Step control events
         document.getElementById('playPause').addEventListener('click', () => this.togglePlayPauseSteps());
         document.getElementById('nextStep').addEventListener('click', () => this.nextStep());
-        document.getElementById('prevStep').addEventListener('click', () => this.prevStep());
+        document.getElementById('prevStep').addEventListener('click', () => this.previousStep());
         document.getElementById('stepSpeed').addEventListener('input', (e) => this.updateStepSpeed(e.target.value));
     }
 
@@ -509,6 +509,9 @@ class BinPackingVisualizer {
             const packedItems = data.packed_items || [];
             const leftoverItems = data.leftover_items || [];
 
+            // Generate algorithm steps from packed_items with pack_order
+            const generatedSteps = this.generateStepsFromPackedItems(packedItems);
+            
             // Set packed results to enable full interface like packing algorithm
             this.packedResults = {
                 packed_items: packedItems,
@@ -516,7 +519,7 @@ class BinPackingVisualizer {
                 utilization: data.utilization || 0,
                 packing_time: data.packing_time || 0,
                 bin_size: this.binSize,
-                steps: [] // Empty steps for visualization only
+                packing_steps: generatedSteps // Generated steps from pack_order
             };
 
             // Use same visualization flow as packing algorithm
@@ -2105,6 +2108,11 @@ class BinPackingVisualizer {
                 if (fileData.training_data && Array.isArray(fileData.training_data)) {
                     // Complete training example format like training_example.json
                     trainingData = fileData;
+                    
+                    // Update UI with training_config from file
+                    if (fileData.training_config) {
+                        this.updateTrainingConfigUI(fileData.training_config);
+                    }
                 } else if (fileData.bin_size) {
                     // File has bin_size but not complete training structure
                     trainingData = {
@@ -2113,6 +2121,11 @@ class BinPackingVisualizer {
                         weights: fileData.weights || this.getDefaultWeights(),
                         training_config: fileData.training_config || this.getDefaultTrainingConfig()
                     };
+                    
+                    // Update UI with training_config from file
+                    if (fileData.training_config) {
+                        this.updateTrainingConfigUI(fileData.training_config);
+                    }
                 } else {
                     this.showToast('Invalid training file format. File must contain bin_size or complete training structure.', 'danger');
                     return;
@@ -2148,6 +2161,11 @@ class BinPackingVisualizer {
             if (this.currentWeightConfig && Object.keys(this.currentWeightConfig).length > 0) {
                 trainingData.training_config.weight_config = { ...this.currentWeightConfig };
                 console.log('Adding weight_config to training request:', this.currentWeightConfig);
+            }
+
+            // Update UI training config values if available in training data
+            if (trainingData.training_config) {
+                this.updateTrainingConfigUI(trainingData.training_config);
             }
 
             // Add supplementary data if available
@@ -2541,30 +2559,102 @@ class BinPackingVisualizer {
             return;
         }
 
-        // Create a proper list container
-        const listContainer = document.createElement('div');
-        listContainer.innerHTML = `
+        // Create the content directly without wrapper div
+        listElement.innerHTML = `
             <h6 class="text-success mb-2">
                 <i class="fas fa-check-circle me-1"></i>
                 Files Added (${this.supplementaryFiles.length}):
             </h6>
             <ul class="list-group list-group-flush">
+                ${this.supplementaryFiles.map(fileName => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-1">
+                        <span class="small">${fileName}</span>
+                        <span class="badge bg-success rounded-pill small"><i class="fas fa-check"></i></span>
+                    </li>
+                `).join('')}
             </ul>
         `;
+    }
 
-        const ulElement = listContainer.querySelector('ul');
+    // Update training configuration UI from loaded file data
+    updateTrainingConfigUI(trainingConfig) {
+        console.log('Updating training config UI with:', trainingConfig);
+        
+        // Update num_steps
+        if (trainingConfig.num_steps !== undefined) {
+            const numStepsInput = document.getElementById('numSteps');
+            if (numStepsInput) {
+                numStepsInput.value = trainingConfig.num_steps;
+                console.log(`Updated numSteps to: ${trainingConfig.num_steps}`);
+            }
+        }
 
-        this.supplementaryFiles.forEach(fileName => {
-            const listItem = document.createElement('li');
-            listItem.className = 'list-group-item d-flex justify-content-between align-items-center px-0 py-1';
-            listItem.innerHTML = `
-                <span class="small">${fileName}</span>
-                <span class="badge bg-success rounded-pill small"><i class="fas fa-check"></i></span>
-            `;
-            ulElement.appendChild(listItem);
+        // Update max_change
+        if (trainingConfig.max_change !== undefined) {
+            const maxChangeInput = document.getElementById('maxChange');
+            if (maxChangeInput) {
+                maxChangeInput.value = trainingConfig.max_change;
+                console.log(`Updated maxChange to: ${trainingConfig.max_change}`);
+            }
+        }
+
+        // Update num_fake_data_samples
+        if (trainingConfig.num_fake_data_samples !== undefined) {
+            const numFakeDataInput = document.getElementById('numFakeDataSamples');
+            if (numFakeDataInput) {
+                numFakeDataInput.value = trainingConfig.num_fake_data_samples;
+                console.log(`Updated numFakeDataSamples to: ${trainingConfig.num_fake_data_samples}`);
+            }
+        }
+
+        // Update weight_config checkboxes if available
+        if (trainingConfig.weight_config) {
+            this.currentWeightConfig = { ...trainingConfig.weight_config };
+            this.updateWeightConfigCheckboxes(trainingConfig.weight_config);
+            console.log('Updated weight_config from file:', trainingConfig.weight_config);
+        }
+
+        this.showToast('Training configuration updated from file', 'info');
+    }
+
+    // Update weight config checkboxes based on loaded configuration
+    updateWeightConfigCheckboxes(weightConfig) {
+        const checkboxes = document.querySelectorAll('.weight-checkbox');
+        checkboxes.forEach(checkbox => {
+            const weightKey = checkbox.dataset.weightKey;
+            if (weightConfig.hasOwnProperty(weightKey)) {
+                checkbox.checked = weightConfig[weightKey];
+                console.log(`Updated weight checkbox ${weightKey} to: ${weightConfig[weightKey]}`);
+            }
+        });
+    }
+
+    // Generate algorithm steps from packed items with pack_order
+    generateStepsFromPackedItems(packedItems) {
+        if (!packedItems || packedItems.length === 0) {
+            return [];
+        }
+
+        // Sort items by pack_order
+        const sortedItems = [...packedItems].sort((a, b) => (a.pack_order || 0) - (b.pack_order || 0));
+        
+        // Generate steps for each packed item
+        const steps = sortedItems.map((item, index) => {
+            return {
+                step: item.pack_order || index + 1,
+                item_id: item.id,
+                position: {
+                    x: item.x || 0,
+                    y: item.y || 0,
+                    z: item.z || 0
+                },
+                rotation_id: item.rotation_id || 0,
+                description: `Placing Item #${item.id} (Pack Order: ${item.pack_order || index + 1}) at position (${item.x || 0}, ${item.y || 0}, ${item.z || 0})`
+            };
         });
 
-        listElement.appendChild(listContainer);
+        console.log(`Generated ${steps.length} algorithm steps from packed items:`, steps);
+        return steps;
     }
 }
 
