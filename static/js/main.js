@@ -20,6 +20,11 @@ class BinPackingVisualizer {
         this.weights = {}; // Store original loaded algorithm weights
         this.currentWeights = {}; // Store editable weights
 
+        // Initialize supplementary files tracking
+        this.supplementaryFiles = [];
+        this.supplementaryFilesData = [];
+
+
         this.init();
     }
 
@@ -61,7 +66,8 @@ class BinPackingVisualizer {
         document.getElementById('runTraining').addEventListener('click', () => this.runTraining());
         document.getElementById('checkTrainingEndpoint').addEventListener('click', () => this.checkTrainingEndpoint());
         document.getElementById('showTrainingFormat').addEventListener('click', () => this.showTrainingFormat());
-        
+        document.getElementById('supplementaryFiles').addEventListener('change', (e) => this.handleSupplementaryFiles(e));
+
         // Set default training endpoint
         document.getElementById('trainingEndpoint').value = 'https://training.ap.ngrok.io/training';
 
@@ -120,7 +126,7 @@ class BinPackingVisualizer {
 
     validateTrainingInput(id, input) {
         const value = parseFloat(input.value);
-        
+
         switch(id) {
             case 'numSteps':
                 if (isNaN(value) || !Number.isInteger(value) || value <= 0) {
@@ -452,7 +458,12 @@ class BinPackingVisualizer {
             margin: { l: 0, r: 0, b: 0, t: 30 }
         };
 
-        Plotly.newPlot('plot3d', traces, layout);
+        try {
+            Plotly.newPlot('plot3d', traces, layout);
+        } catch (error) {
+            console.error('Plotly visualization error:', error);
+            this.showToast('Visualization error. Please check browser compatibility.', 'danger');
+        }
 
         // Update stats
         document.getElementById('placedBadge').textContent = `Visualized: ${items.length}`;
@@ -583,7 +594,12 @@ class BinPackingVisualizer {
             margin: { l: 0, r: 0, b: 0, t: 30 }
         };
 
-        Plotly.newPlot('plot3d', traces, layout);
+        try {
+            Plotly.newPlot('plot3d', traces, layout);
+        } catch (error) {
+            console.error('Plotly visualization error:', error);
+            this.showToast('Visualization error. Please check browser compatibility.', 'danger');
+        }
 
         // Update stats
         document.getElementById('placedBadge').textContent = `Packed: ${packedItems.length}`;
@@ -898,7 +914,12 @@ class BinPackingVisualizer {
         };
 
 
-        Plotly.react('plot3d', data, layout);
+        try {
+            Plotly.react('plot3d', data, layout);
+        } catch (error) {
+            console.error('Plot update error:', error);
+            this.showToast('Visualization update failed.', 'warning');
+        }
 
         // Add click event for item details
         document.getElementById('plot3d').on('plotly_click', (eventData) => {
@@ -1171,7 +1192,12 @@ class BinPackingVisualizer {
             displaylogo: false
         };
 
-        Plotly.newPlot('plot3d', data, layout, config);
+        try {
+            Plotly.newPlot('plot3d', data, layout, config);
+        } catch (error) {
+            console.error('Plotly visualization error:', error);
+            this.showToast('Visualization error. Please check browser compatibility.', 'danger');
+        }
     }
 
     createWarehouseOutline() {
@@ -1516,6 +1542,7 @@ class BinPackingVisualizer {
         document.getElementById('jsonFile').value = '';
         document.getElementById('visualizeFile').value = ''; // Clear visualize file input
         document.getElementById('trainingFile').value = ''; // Clear training file input
+        document.getElementById('supplementaryFiles').value = ''; // Clear supplementary files input
         document.getElementById('trainingEndpoint').value = ''; // Clear training endpoint
         document.getElementById('numSteps').value = '10'; // Reset training config
         document.getElementById('maxChange').value = '0.1';
@@ -1830,7 +1857,12 @@ class BinPackingVisualizer {
         };
 
 
-        Plotly.react('plot3d', data, layout);
+        try {
+            Plotly.react('plot3d', data, layout);
+        } catch (error) {
+            console.error('Plot update error:', error);
+            this.showToast('Visualization update failed.', 'warning');
+        }
     }
 
     // JSON Structure Modal methods
@@ -1925,7 +1957,7 @@ class BinPackingVisualizer {
         this.weights = weights;
         // Store current weights for editing
         this.currentWeights = { ...weights };
-        
+
         // Initialize weight config (all weights enabled by default)
         this.currentWeightConfig = {};
         Object.keys(weights).forEach(key => {
@@ -1940,7 +1972,7 @@ class BinPackingVisualizer {
                 <div class="row mb-2 align-items-center">
                     <div class="col-1">
                         <div class="form-check">
-                            <input class="form-check-input weight-checkbox" type="checkbox" 
+                            <input class="form-check-input weight-checkbox" type="checkbox"
                                    data-weight-key="${key}" checked>
                         </div>
                     </div>
@@ -2052,7 +2084,6 @@ class BinPackingVisualizer {
         return weights;
     }
 
-
     async runTraining() {
         const fileInput = document.getElementById('trainingFile');
         const file = fileInput.files[0];
@@ -2090,7 +2121,7 @@ class BinPackingVisualizer {
                 // Case 2: No file - use bin_size from interface with minimum required structure
                 // Ensure we use current bin_size from interface
                 this.updateBinSize(); // Make sure bin size is current
-                
+
                 trainingData = {
                     bin_size: {
                         L: this.binSize.length,
@@ -2098,13 +2129,13 @@ class BinPackingVisualizer {
                         H: this.binSize.height
                     }
                 };
-                
+
                 // Add weights if available
                 const currentWeights = this.getCurrentWeights();
                 if (currentWeights && Object.keys(currentWeights).length > 0) {
                     trainingData.weights = currentWeights;
                 }
-                
+
                 console.log('Training without file - using bin_size from interface:', trainingData);
             }
 
@@ -2117,6 +2148,14 @@ class BinPackingVisualizer {
             if (this.currentWeightConfig && Object.keys(this.currentWeightConfig).length > 0) {
                 trainingData.training_config.weight_config = { ...this.currentWeightConfig };
                 console.log('Adding weight_config to training request:', this.currentWeightConfig);
+            }
+
+            // Add supplementary data if available
+            if (this.supplementaryFilesData.length > 0) {
+                // Merge supplementary data into training_data
+                trainingData.training_data = trainingData.training_data || [];
+                trainingData.training_data.push(...this.supplementaryFilesData);
+                console.log(`Added ${this.supplementaryFilesData.length} supplementary training data entries.`);
             }
 
             this.showProcessingToast('Starting algorithm training...');
@@ -2148,7 +2187,7 @@ class BinPackingVisualizer {
                 this.weights = roundedWeights;
                 this.currentWeights = {...roundedWeights};
                 this.showWeights(this.currentWeights);
-                
+
                 // Show success message with training details
                 let successMessage = 'Training completed successfully! Algorithm weights updated.';
                 if (result.message) {
@@ -2158,7 +2197,7 @@ class BinPackingVisualizer {
                     successMessage += ` Best efficiency: ${(result.best_average_efficiency * 100).toFixed(2)}%`;
                 }
                 this.showToast(successMessage, 'success');
-                
+
                 console.log('Updated weights from training:', roundedWeights);
             } else {
                 this.showToast('Training completed but no weights returned', 'warning');
@@ -2189,7 +2228,7 @@ class BinPackingVisualizer {
     getDefaultTrainingConfig() {
         const defaultWeights = this.getDefaultWeights();
         const defaultWeightConfig = {};
-        
+
         // Set all weights to true by default
         Object.keys(defaultWeights).forEach(key => {
             defaultWeightConfig[key] = true;
@@ -2323,6 +2362,209 @@ class BinPackingVisualizer {
         // Show modal
         const modal = new bootstrap.Modal(document.getElementById('trainingFormatModal'));
         modal.show();
+    }
+
+    // Handles the upload of supplementary training files
+    async handleSupplementaryFiles(event) {
+        const files = event.target.files;
+        if (!files || files.length === 0) {
+            return;
+        }
+
+        // Clear existing supplementary data and display if new files are uploaded
+        this.supplementaryFilesData = [];
+        this.displaySupplementaryFilesList(); // Update the list to be empty
+
+        const filePromises = Array.from(files).map(async (file) => {
+            const reader = new FileReader();
+            return new Promise((resolve, reject) => {
+                reader.onload = async (e) => {
+                    try {
+                        const content = e.target.result;
+                        let data;
+                        let items = [];
+
+                        // Try to parse as JSON first
+                        try {
+                            data = JSON.parse(content);
+                            console.log(`Parsed ${file.name} as JSON:`, data);
+                        } catch (jsonError) {
+                            console.log(`${file.name} is not JSON, parsing as text format`);
+                            // Will handle text parsing below
+                        }
+
+                        // Fallback to line-by-line parsing if JSON parsing failed
+                        if (!data && items.length === 0) {
+                                const lines = content.trim().split('\n');
+
+                            for (let i = 0; i < lines.length; i++) {
+                                const line = lines[i].trim();
+                                if (line && !line.startsWith('#') && line !== '') {
+                                    // Try different formats
+                                    // Format 1: length,width,height,id,quantity
+                                    // Format 2: id:length,width,height
+                                    // Format 3: just length width height (space separated)
+
+                                    let parts;
+                                    if (line.includes(',')) {
+                                        parts = line.split(',').map(p => p.trim());
+                                    } else if (line.includes(' ')) {
+                                        parts = line.split(/\s+/).map(p => p.trim());
+                                    } else {
+                                        continue; // Skip invalid lines
+                                    }
+
+                                    if (parts.length >= 3) {
+                                        const length = parseFloat(parts[0]);
+                                        const width = parseFloat(parts[1]);
+                                        const height = parseFloat(parts[2]);
+
+                                        if (!isNaN(length) && !isNaN(width) && !isNaN(height)) {
+                                            items.push({
+                                                id: parts.length > 3 ? parts[3] : `item_${i}`,
+                                                L: length,
+                                                W: width,
+                                                H: height,
+                                                quantity: parts.length > 4 ? parseInt(parts[4]) || 1 : 1
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // If JSON, extract items
+                        if (data && data.items && Array.isArray(data.items)) {
+                            items = data.items;
+                        } else if (data && Array.isArray(data)) {
+                            // Process array format directly - each array element represents an item
+                            console.log(`Processing ${file.name} as array format with ${data.length} items`);
+
+                            data.forEach((row, index) => {
+                                if (Array.isArray(row) && row.length >= 3) {
+                                    const length = parseFloat(row[0]);
+                                    const width = parseFloat(row[1]);
+                                    const height = parseFloat(row[2]);
+
+                                    // Use the last value as ID if available, otherwise use index
+                                    const itemId = row.length >= 11 ? row[10] : index;
+
+                                    if (!isNaN(length) && !isNaN(width) && !isNaN(height)) {
+                                        items.push({
+                                            id: itemId,
+                                            L: length,
+                                            W: width,
+                                            H: height,
+                                            quantity: 1,
+                                            // Store additional data if available
+                                            x: row.length >= 6 ? parseFloat(row[3]) : 0,
+                                            y: row.length >= 6 ? parseFloat(row[4]) : 0,
+                                            z: row.length >= 6 ? parseFloat(row[5]) : 0,
+                                            original_data: row
+                                        });
+                                    }
+                                }
+                            });
+
+                            console.log(`Successfully parsed ${file.name} from array format with ${items.length} items`);
+                        } else if (items.length === 0) {
+                            console.log(`Skipping invalid file: ${file.name}. Missing 'items' array or no valid items found.`);
+                            reject({ name: file.name, status: 'error', message: 'Invalid file format - no items found' });
+                            return;
+                        }
+
+                        // Create training entry in the format expected by training API
+                        const processedItems = items.map(item => ({
+                            id: item.id || 0,
+                            request_id: item.request_id || item.id || 0,
+                            L: item.L || item.length || 0,
+                            W: item.W || item.width || 0,
+                            H: item.H || item.height || 0,
+                            num_axis: item.num_axis || 2,
+                            quantity: item.quantity || 1
+                        }));
+
+                        // Create stack_rule and lifo_order arrays based on number of items
+                        const itemCount = processedItems.length;
+                        const stackRule = new Array(itemCount).fill(100);
+                        const lifoOrder = new Array(itemCount).fill(0);
+
+                        const trainingEntry = {
+                            items: processedItems,
+                            bin_size: {
+                                L: data?.bin_size?.L || data?.bin_size?.length || this.binSize.length || 2500,
+                                W: data?.bin_size?.W || data?.bin_size?.width || this.binSize.width || 2500,
+                                H: data?.bin_size?.H || data?.bin_size?.height || this.binSize.height || 3000
+                            },
+                            parameters: {
+                                stack_rule: stackRule,
+                                lifo_order: lifoOrder
+                            }
+                        };
+
+                        console.log(`Successfully processed ${file.name} with ${trainingEntry.items.length} items as training entry:`, trainingEntry);
+                        this.supplementaryFilesData.push(trainingEntry);
+                        resolve({ name: file.name, status: 'success', itemCount: trainingEntry.items.length });
+
+                    } catch (error) {
+                        console.error(`Error processing file ${file.name}:`, error);
+                        reject({ name: file.name, status: 'error', message: error.message });
+                    }
+                };
+                reader.onerror = () => reject({ name: file.name, status: 'error', message: 'File reading error' });
+                reader.readAsText(file);
+            });
+        });
+
+        // Update supplementaryFiles array with file names
+        this.supplementaryFiles = Array.from(files).map(file => file.name);
+
+        try {
+            const results = await Promise.allSettled(filePromises);
+            this.displaySupplementaryFilesList();
+
+            const totalItems = this.supplementaryFilesData.reduce((sum, entry) => sum + entry.items.length, 0);
+            this.showToast(`Loaded ${this.supplementaryFilesData.length} supplementary training files with ${totalItems} total items.`, 'success');
+        } catch (error) {
+            // Error handling is done within the promise map
+            this.showToast(`Error loading some supplementary files. Check console for details.`, 'danger');
+        }
+    }
+
+    // Displays the list of successfully processed supplementary files
+    displaySupplementaryFilesList() {
+        const listElement = document.getElementById('supplementaryFilesList');
+        listElement.innerHTML = ''; // Clear previous list
+
+        if (this.supplementaryFiles.length === 0) {
+            listElement.innerHTML = '<p class="text-muted">No supplementary files added yet.</p>';
+            return;
+        }
+
+        // Create a proper list container
+        const listContainer = document.createElement('div');
+        listContainer.innerHTML = `
+            <h6 class="text-success mb-2">
+                <i class="fas fa-check-circle me-1"></i>
+                Files Added (${this.supplementaryFiles.length}):
+            </h6>
+            <ul class="list-group list-group-flush">
+            </ul>
+        `;
+
+        const ulElement = listContainer.querySelector('ul');
+
+        this.supplementaryFiles.forEach(fileName => {
+            const listItem = document.createElement('li');
+            listItem.className = 'list-group-item d-flex justify-content-between align-items-center px-0 py-1';
+            listItem.innerHTML = `
+                <span class="small">${fileName}</span>
+                <span class="badge bg-success rounded-pill small"><i class="fas fa-check"></i></span>
+            `;
+            ulElement.appendChild(listItem);
+        });
+
+        listElement.appendChild(listContainer);
     }
 }
 
