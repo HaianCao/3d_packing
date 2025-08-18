@@ -195,9 +195,12 @@
                                         <div id="trainingEndpointStatus" class="mt-2"></div>
                                     </div>
                                     <div class="mb-3">
-                                        <label class="form-label fw-bold">Training Data File</label>
+                                        <label class="form-label fw-bold">Training Data File (Optional)</label>
                                         <input type="file" class="form-control" id="trainingFile" accept=".json">
-                                        <small class="text-muted">Upload training data in format like training_example.json</small>
+                                        <small class="text-muted">
+                                            Upload training data in format like training_example.json.<br>
+                                            If no file provided, current bin_size from interface will be used.
+                                        </small>
                                     </div>
                                     <div class="d-grid gap-2 mb-3">
                                         <button class="btn btn-warning" id="runTraining">
@@ -350,12 +353,13 @@
             <div class="col-lg-8 col-xl-9 p-4 position-relative">
                 <div class="h-100 d-flex flex-column">
                     <!-- Visualization Header -->
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h4 class="text-primary-bright mb-0">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+                        <h4 class="text-primary-bright mb-0 order-1">
                             <i class="fas fa-cube me-2"></i>
-                            3D Warehouse Visualization
+                            <span class="d-none d-md-inline">3D Warehouse Visualization</span>
+                            <span class="d-md-none">3D Warehouse</span>
                         </h4>
-                        <div class="stats-badges">
+                        <div class="stats-badges order-2 w-100 w-md-auto mt-2 mt-md-0">
                             <span class="badge bg-success-bright me-2" id="placedBadge" style="opacity: 1.0;">
                                 <i class="fas fa-check-circle me-1"></i>
                                 Placed: 0
@@ -410,10 +414,11 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="d-grid gap-2 d-md-flex justify-content-md-between">
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-between step-controls-mobile">
                                 <button class="btn btn-outline-secondary" id="prevStep" disabled>
                                     <i class="fas fa-step-backward me-2"></i>
-                                    Previous
+                                    <span class="d-none d-sm-inline">Previous</span>
+                                    <span class="d-sm-none">Prev</span>
                                 </button>
                                 <button class="btn btn-success-bright" id="playPause">
                                     <i class="fas fa-play me-2"></i>
@@ -421,7 +426,8 @@
                                 </button>
                                 <button class="btn btn-outline-secondary" id="nextStep" disabled>
                                     <i class="fas fa-step-forward me-2"></i>
-                                    Next
+                                    <span class="d-none d-sm-inline">Next</span>
+                                    <span class="d-sm-none">Next</span>
                                 </button>
                             </div>
                             <div class="mt-3">

@@ -1594,10 +1594,10 @@ class BinPackingVisualizer {
 
         document.getElementById('stepControlPanel').style.display = 'block';
         document.getElementById('totalSteps').textContent = this.packingSteps.length;
-        
+
         // Update controls to show final step
         this.updateStepControls();
-        
+
         // Reset play state
         this.isPlaying = false;
         this.updatePlayPauseButton();
@@ -1877,14 +1877,16 @@ class BinPackingVisualizer {
 
         const weightsHtml = Object.entries(weights).map(([key, value]) => {
             const keyDisplay = key.replace('W_', '').replace(/_/g, ' ').toUpperCase();
+            // Round to 2 decimal places for display
+            const displayValue = Math.round(value * 100) / 100;
             return `
                 <div class="row mb-2 align-items-center">
                     <div class="col-6">
                         <label class="form-label fw-bold small mb-0">${keyDisplay}</label>
                     </div>
                     <div class="col-6">
-                        <input type="text" class="form-control form-control-sm weight-input"
-                               data-weight-key="${key}" value="${value}" placeholder="Enter value">
+                        <input type="number" step="0.01" class="form-control form-control-sm weight-input"
+                               data-weight-key="${key}" value="${displayValue}" placeholder="Enter value">
                     </div>
                 </div>
             `;
@@ -1913,20 +1915,10 @@ class BinPackingVisualizer {
         console.log(`Updated weight ${key} to ${value}`);
         // Initialize weights with defaults if not exists
         if (!this.currentWeights) {
-            this.currentWeights = {
-                "W_lifo": 10.0,
-                "W_sim_l": -1.0,
-                "W_sim_w": -1.0,
-                "W_sim_h": 0.0,
-                "W_leftover_l_ratio": -5.0,
-                "W_leftover_w_ratio": -5.0,
-                "W_packable_l": -0.5,
-                "W_packable_w": -0.5,
-                "W_max_l": 1000.0,
-                "W_size_score": 3.299999952316284
-            };
+            this.currentWeights = this.getDefaultWeights();
         }
-        this.currentWeights[key] = parseFloat(value);
+        // Round to 2 decimal places
+        this.currentWeights[key] = Math.round(parseFloat(value) * 100) / 100;
     }
 
     getCurrentWeights() {
@@ -1967,12 +1959,7 @@ class BinPackingVisualizer {
     async runTraining() {
         const fileInput = document.getElementById('trainingFile');
         const file = fileInput.files[0];
-        const endpoint = document.getElementById('trainingEndpoint').value;
-
-        if (!file) {
-            this.showToast('Please select a training data file', 'warning');
-            return;
-        }
+        const endpoint = document.getElementById('trainingEndpoint').value.trim();
 
         if (!endpoint) {
             this.showToast('Please enter training endpoint URL', 'warning');
@@ -1980,8 +1967,49 @@ class BinPackingVisualizer {
         }
 
         try {
-            const text = await file.text();
-            const trainingData = JSON.parse(text);
+            let trainingData = {};
+
+            if (file) {
+                // Case 1: File uploaded - parse and validate
+                const text = await file.text();
+                const fileData = JSON.parse(text);
+
+                if (fileData.training_data && Array.isArray(fileData.training_data)) {
+                    // Complete training example format like training_example.json
+                    trainingData = fileData;
+                } else if (fileData.bin_size) {
+                    // File has bin_size but not complete training structure
+                    trainingData = {
+                        bin_size: fileData.bin_size,
+                        training_data: fileData.training_data || [],
+                        weights: fileData.weights || this.getDefaultWeights(),
+                        training_config: fileData.training_config || this.getDefaultTrainingConfig()
+                    };
+                } else {
+                    this.showToast('Invalid training file format. File must contain bin_size or complete training structure.', 'danger');
+                    return;
+                }
+            } else {
+                // Case 2: No file - use bin_size from interface with minimum required structure
+                // Ensure we use current bin_size from interface
+                this.updateBinSize(); // Make sure bin size is current
+                
+                trainingData = {
+                    bin_size: {
+                        L: this.binSize.length,
+                        W: this.binSize.width,
+                        H: this.binSize.height
+                    }
+                };
+                
+                // Add weights if available
+                const currentWeights = this.getCurrentWeights();
+                if (currentWeights && Object.keys(currentWeights).length > 0) {
+                    trainingData.weights = currentWeights;
+                }
+                
+                console.log('Training without file - using bin_size from interface:', trainingData);
+            }
 
             this.showProcessingToast('Starting algorithm training...');
 
@@ -1994,7 +2022,8 @@ class BinPackingVisualizer {
             });
 
             if (!response.ok) {
-                throw new Error(`Training failed: ${response.status} ${response.statusText}`);
+                const errorText = await response.text();
+                throw new Error(`Training failed: ${response.status} ${response.statusText} - ${errorText}`);
             }
 
             const result = await response.json();
@@ -2002,10 +2031,27 @@ class BinPackingVisualizer {
 
             // Update weights with best_weights from training result
             if (result.best_weights) {
-                this.weights = result.best_weights; // Store the best weights
-                this.currentWeights = {...result.best_weights}; // Update editable weights
-                this.showWeights(this.currentWeights); // Display updated weights
-                this.showToast(`Training completed! Best efficiency: ${(result.best_average_efficiency * 100).toFixed(2)}%`, 'success');
+                // Round weights to 2 decimal places
+                const roundedWeights = {};
+                Object.keys(result.best_weights).forEach(key => {
+                    roundedWeights[key] = Math.round(result.best_weights[key] * 100) / 100;
+                });
+
+                this.weights = roundedWeights;
+                this.currentWeights = {...roundedWeights};
+                this.showWeights(this.currentWeights);
+                
+                // Show success message with training details
+                let successMessage = 'Training completed successfully! Algorithm weights updated.';
+                if (result.message) {
+                    successMessage = result.message + ' Weights updated on interface.';
+                }
+                if (result.best_average_efficiency !== undefined) {
+                    successMessage += ` Best efficiency: ${(result.best_average_efficiency * 100).toFixed(2)}%`;
+                }
+                this.showToast(successMessage, 'success');
+                
+                console.log('Updated weights from training:', roundedWeights);
             } else {
                 this.showToast('Training completed but no weights returned', 'warning');
             }
@@ -2014,6 +2060,30 @@ class BinPackingVisualizer {
             console.error('Training error:', error);
             this.showToast(`Training failed: ${error.message}`, 'danger');
         }
+    }
+
+    getDefaultWeights() {
+        return {
+            "W_lifo": 1.0,
+            "W_sim_l": 1.0,
+            "W_sim_w": 1.0,
+            "W_sim_h": 1.0,
+            "W_leftover_l_ratio": 1.0,
+            "W_leftover_w_ratio": 1.0,
+            "W_packable_l": 1.0,
+            "W_packable_w": 1.0,
+            "W_max_l": 1000.0,
+            "W_max_w": 1000.0,
+            "W_size_score": 3.30
+        };
+    }
+
+    getDefaultTrainingConfig() {
+        return {
+            "num_steps": 10,
+            "max_change": 0.1,
+            "num_fake_data_samples": 5
+        };
     }
 
     async checkTrainingEndpoint() {
