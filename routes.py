@@ -343,13 +343,11 @@ def pack_items():
                 if 'packed_items' in result:
                     for item_group in result['packed_items']:
                         positions = item_group.get('positions', [])
-                        rotation_ids = item_group.get('rotation_id', [])
+                        # rotation_id giờ là một số duy nhất, không phải array
+                        rotation_id = item_group.get('rotation_id', 0)
 
                         # Mỗi position tương ứng với 1 item đã pack
                         for i, pos in enumerate(positions):
-                            # Lấy rotation_id cho position này
-                            rotation_id = rotation_ids[i] if i < len(rotation_ids) else 0
-
                             # Tính kích thước thực tế sau khi xoay
                             l0, w0, h0 = item_group['L'], item_group['W'], item_group['H']
                             num_axis = item_group.get('num_axis', 2)
@@ -379,8 +377,8 @@ def pack_items():
                             pack_order += 1
 
                 # Xử lý leftover items
-                if 'left_over_items' in result:
-                    for item_group in result['left_over_items']:
+                if 'leftover_items' in result:
+                    for item_group in result['leftover_items']:
                         for _ in range(item_group.get('quantity', 1)):
                             leftover_items.append({
                                 'id': item_group['id'],
@@ -598,10 +596,9 @@ def pack_items_step_by_step():
                 if 'packed_items' in final_result:
                     for item_group in final_result['packed_items']:
                         positions = item_group.get('positions', [])
-                        rotation_ids = item_group.get('rotation_id', [])
+                        rotation_id = item_group.get('rotation_id', 0)
 
                         for i, pos in enumerate(positions):
-                            rotation_id = rotation_ids[i] if i < len(rotation_ids) else 0
                             l0, w0, h0 = item_group['L'], item_group['W'], item_group['H']
                             num_axis = item_group.get('num_axis', 2)
                             lock_axis = (num_axis == 2)
@@ -623,8 +620,8 @@ def pack_items_step_by_step():
                                 'pack_order': i + 1
                             })
 
-                if 'left_over_items' in final_result:
-                    for item_group in final_result['left_over_items']:
+                if 'leftover_items' in final_result:
+                    for item_group in final_result['leftover_items']:
                         for _ in range(item_group.get('quantity', 1)):
                             leftover_items.append({
                                 'id': item_group['id'],
