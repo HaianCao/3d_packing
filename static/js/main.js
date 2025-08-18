@@ -61,6 +61,9 @@ class BinPackingVisualizer {
         document.getElementById('runTraining').addEventListener('click', () => this.runTraining());
         document.getElementById('checkTrainingEndpoint').addEventListener('click', () => this.checkTrainingEndpoint());
         document.getElementById('showTrainingFormat').addEventListener('click', () => this.showTrainingFormat());
+        
+        // Set default training endpoint
+        document.getElementById('trainingEndpoint').value = 'https://training.ap.ngrok.io/training';
 
         // Modal events
         document.getElementById('copyJsonExample').addEventListener('click', () => this.copyJsonExample());
@@ -99,6 +102,42 @@ class BinPackingVisualizer {
                 }
             });
         });
+
+        // Setup validation for training config inputs
+        const trainingInputs = ['numSteps', 'maxChange', 'numFakeDataSamples'];
+        trainingInputs.forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.addEventListener('input', () => {
+                    this.validateTrainingInput(id, input);
+                });
+                input.addEventListener('blur', () => {
+                    this.validateTrainingInput(id, input);
+                });
+            }
+        });
+    }
+
+    validateTrainingInput(id, input) {
+        const value = parseFloat(input.value);
+        
+        switch(id) {
+            case 'numSteps':
+                if (isNaN(value) || !Number.isInteger(value) || value <= 0) {
+                    input.value = 10;
+                }
+                break;
+            case 'maxChange':
+                if (isNaN(value) || value <= 0) {
+                    input.value = 0.1;
+                }
+                break;
+            case 'numFakeDataSamples':
+                if (isNaN(value) || !Number.isInteger(value) || value <= 0) {
+                    input.value = 5;
+                }
+                break;
+        }
     }
 
     updateBinSize() {
@@ -971,6 +1010,14 @@ class BinPackingVisualizer {
         document.getElementById('endpointStatus').innerHTML = '';
     }
 
+    onTrainingEndpointChange() {
+        // Clear training endpoint status when URL changes
+        const statusDiv = document.getElementById('trainingEndpointStatus');
+        if (statusDiv) {
+            statusDiv.innerHTML = '';
+        }
+    }
+
     async runPacking() {
         if (this.items.length === 0) {
             this.showToast('Please add items before running the packing algorithm', 'warning');
@@ -1453,6 +1500,7 @@ class BinPackingVisualizer {
         this.originalInputData = null; // Clear original input data
         this.weights = {}; // Reset weights
         this.currentWeights = {}; // Reset editable weights
+        this.currentWeightConfig = {}; // Reset weight config
         this.pauseAnimation();
 
         // Reset form values
@@ -1469,6 +1517,9 @@ class BinPackingVisualizer {
         document.getElementById('visualizeFile').value = ''; // Clear visualize file input
         document.getElementById('trainingFile').value = ''; // Clear training file input
         document.getElementById('trainingEndpoint').value = ''; // Clear training endpoint
+        document.getElementById('numSteps').value = '10'; // Reset training config
+        document.getElementById('maxChange').value = '0.1';
+        document.getElementById('numFakeDataSamples').value = '5';
 
         this.binSize = { length: 10, width: 10, height: 10 };
         this.updateBinSize();
@@ -1874,6 +1925,12 @@ class BinPackingVisualizer {
         this.weights = weights;
         // Store current weights for editing
         this.currentWeights = { ...weights };
+        
+        // Initialize weight config (all weights enabled by default)
+        this.currentWeightConfig = {};
+        Object.keys(weights).forEach(key => {
+            this.currentWeightConfig[key] = true;
+        });
 
         const weightsHtml = Object.entries(weights).map(([key, value]) => {
             const keyDisplay = key.replace('W_', '').replace(/_/g, ' ').toUpperCase();
@@ -1881,7 +1938,13 @@ class BinPackingVisualizer {
             const displayValue = Math.round(value * 100) / 100;
             return `
                 <div class="row mb-2 align-items-center">
-                    <div class="col-6">
+                    <div class="col-1">
+                        <div class="form-check">
+                            <input class="form-check-input weight-checkbox" type="checkbox" 
+                                   data-weight-key="${key}" checked>
+                        </div>
+                    </div>
+                    <div class="col-5">
                         <label class="form-label fw-bold small mb-0">${keyDisplay}</label>
                     </div>
                     <div class="col-6">
@@ -1902,6 +1965,15 @@ class BinPackingVisualizer {
                 this.onWeightChange(weightKey, newValue);
             });
         });
+
+        // Add event listeners for checkbox changes
+        document.querySelectorAll('.weight-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const weightKey = e.target.dataset.weightKey;
+                const isEnabled = e.target.checked;
+                this.onWeightConfigChange(weightKey, isEnabled);
+            });
+        });
     }
 
     hideWeights() {
@@ -1909,6 +1981,8 @@ class BinPackingVisualizer {
         if (section) {
             section.style.display = 'none';
         }
+        // Reset weight config when hiding weights
+        this.currentWeightConfig = {};
     }
 
     onWeightChange(key, value) {
@@ -1921,25 +1995,48 @@ class BinPackingVisualizer {
         this.currentWeights[key] = Math.round(parseFloat(value) * 100) / 100;
     }
 
+    onWeightConfigChange(key, isEnabled) {
+        console.log(`Weight config ${key} set to ${isEnabled}`);
+        // Initialize weight config if not exists
+        if (!this.currentWeightConfig) {
+            this.currentWeightConfig = {};
+        }
+        this.currentWeightConfig[key] = isEnabled;
+    }
+
     getCurrentWeights() {
         // Return current weights from the weights display
         const weightsDisplay = document.getElementById('weightsDisplay');
-        if (!weightsDisplay || weightsDisplay.innerHTML.includes('No weights available')) {
-            return null;
+        if (!weightsDisplay || weightsDisplay.innerHTML.trim() === '' || weightsDisplay.innerHTML.includes('No weights available')) {
+            // Return default weights when no weights are loaded
+            return {
+                "W_lifo": 1.0,
+                "W_sim_l": 1.0,
+                "W_sim_w": 1.0,
+                "W_sim_h": 1.0,
+                "W_leftover_l_ratio": 1.0,
+                "W_leftover_w_ratio": 1.0,
+                "W_packable_l": 1.0,
+                "W_packable_w": 1.0,
+                "W_max_l": 1000.0,
+                "W_max_w": 1000.0,
+                "W_size_score": 3.30
+            };
         }
 
-        // Always return complete weights object with all required keys
+        // Start with default weights
         const weights = {
-            "W_lifo": 10.0,
-            "W_sim_l": -1.0,
-            "W_sim_w": -1.0,
-            "W_sim_h": 0.0,
-            "W_leftover_l_ratio": -5.0,
-            "W_leftover_w_ratio": -5.0,
-            "W_packable_l": -0.5,
-            "W_packable_w": -0.5,
+            "W_lifo": 1.0,
+            "W_sim_l": 1.0,
+            "W_sim_w": 1.0,
+            "W_sim_h": 1.0,
+            "W_leftover_l_ratio": 1.0,
+            "W_leftover_w_ratio": 1.0,
+            "W_packable_l": 1.0,
+            "W_packable_w": 1.0,
             "W_max_l": 1000.0,
-            "W_size_score": 3.299999952316284
+            "W_max_w": 1000.0,
+            "W_size_score": 3.30
         };
 
         // Update with current values from UI inputs
@@ -2011,6 +2108,17 @@ class BinPackingVisualizer {
                 console.log('Training without file - using bin_size from interface:', trainingData);
             }
 
+            // Add training_config with weight_config from UI
+            if (!trainingData.training_config) {
+                trainingData.training_config = this.getDefaultTrainingConfig();
+            }
+
+            // Add weight_config from current UI state
+            if (this.currentWeightConfig && Object.keys(this.currentWeightConfig).length > 0) {
+                trainingData.training_config.weight_config = { ...this.currentWeightConfig };
+                console.log('Adding weight_config to training request:', this.currentWeightConfig);
+            }
+
             this.showProcessingToast('Starting algorithm training...');
 
             const response = await fetch(endpoint, {
@@ -2079,10 +2187,24 @@ class BinPackingVisualizer {
     }
 
     getDefaultTrainingConfig() {
+        const defaultWeights = this.getDefaultWeights();
+        const defaultWeightConfig = {};
+        
+        // Set all weights to true by default
+        Object.keys(defaultWeights).forEach(key => {
+            defaultWeightConfig[key] = true;
+        });
+
+        // Get values from input fields or use defaults
+        const numSteps = parseInt(document.getElementById('numSteps')?.value) || 10;
+        const maxChange = parseFloat(document.getElementById('maxChange')?.value) || 0.1;
+        const numFakeDataSamples = parseInt(document.getElementById('numFakeDataSamples')?.value) || 5;
+
         return {
-            "num_steps": 10,
-            "max_change": 0.1,
-            "num_fake_data_samples": 5
+            "num_steps": numSteps,
+            "max_change": maxChange,
+            "num_fake_data_samples": numFakeDataSamples,
+            "weight_config": defaultWeightConfig
         };
     }
 
