@@ -24,6 +24,8 @@ class BinPackingVisualizer {
         this.supplementaryFiles = [];
         this.supplementaryFilesData = [];
 
+        // Initialize loaded training data
+        this.loadedTrainingData = null;
 
         this.init();
     }
@@ -66,10 +68,14 @@ class BinPackingVisualizer {
         document.getElementById('runTraining').addEventListener('click', () => this.runTraining());
         document.getElementById('checkTrainingEndpoint').addEventListener('click', () => this.checkTrainingEndpoint());
         document.getElementById('showTrainingFormat').addEventListener('click', () => this.showTrainingFormat());
+        document.getElementById('loadTrainingFile').addEventListener('click', () => this.loadTrainingFile());
         document.getElementById('supplementaryFiles').addEventListener('change', (e) => this.handleSupplementaryFiles(e));
 
         // Set default training endpoint
         document.getElementById('trainingEndpoint').value = 'https://training.ap.ngrok.io/training';
+
+        // Add event listener for training endpoint input changes
+        document.getElementById('trainingEndpoint').addEventListener('input', () => this.onTrainingEndpointChange());
 
         // Modal events
         document.getElementById('copyJsonExample').addEventListener('click', () => this.copyJsonExample());
@@ -83,83 +89,42 @@ class BinPackingVisualizer {
     }
 
     setupFormValidation() {
-        const inputs = ['itemLength', 'itemWidth', 'itemHeight', 'itemId', 'binLength', 'binWidth', 'binHeight'];
+        const inputs = ['binLength', 'binWidth', 'binHeight'];
         inputs.forEach(id => {
             const input = document.getElementById(id);
             input.addEventListener('input', () => {
-                const value = parseInt(input.value);
-                if (value < 1 || isNaN(value)) {
-                    input.value = 1;
-                }
                 // Update bin size if it's a warehouse dimension input
                 if (['binLength', 'binWidth', 'binHeight'].includes(id)) {
                     this.updateBinSize();
                 }
             });
 
-            // Also handle blur event to ensure validation when user leaves the field
+            // Also handle blur event for bin size updates
             input.addEventListener('blur', () => {
-                const value = parseInt(input.value);
-                if (value < 1 || isNaN(value)) {
-                    input.value = 1;
-                    if (['binLength', 'binWidth', 'binHeight'].includes(id)) {
-                        this.updateBinSize();
-                    }
+                if (['binLength', 'binWidth', 'binHeight'].includes(id)) {
+                    this.updateBinSize();
                 }
             });
         });
 
-        // Setup validation for training config inputs
-        const trainingInputs = ['numSteps', 'maxChange', 'numFakeDataSamples'];
-        trainingInputs.forEach(id => {
-            const input = document.getElementById(id);
-            if (input) {
-                input.addEventListener('input', () => {
-                    this.validateTrainingInput(id, input);
-                });
-                input.addEventListener('blur', () => {
-                    this.validateTrainingInput(id, input);
-                });
-            }
-        });
+        // Remove validation for training config inputs - allow any values
+        // Training config inputs: numSteps, maxChange, numFakeDataSamples will now accept any values
     }
 
     validateTrainingInput(id, input) {
-        const value = parseFloat(input.value);
-
-        switch(id) {
-            case 'numSteps':
-                if (isNaN(value) || !Number.isInteger(value) || value <= 0) {
-                    input.value = 10;
-                }
-                break;
-            case 'maxChange':
-                if (isNaN(value) || value <= 0) {
-                    input.value = 0.1;
-                }
-                break;
-            case 'numFakeDataSamples':
-                if (isNaN(value) || !Number.isInteger(value) || value <= 0) {
-                    input.value = 5;
-                }
-                break;
-        }
+        // No validation - allow any values for training inputs
+        // Users can enter any values including negative numbers, decimals, etc.
     }
 
     updateBinSize() {
-        const length = parseInt(document.getElementById('binLength').value) || 1;
-        const width = parseInt(document.getElementById('binWidth').value) || 1;
-        const height = parseInt(document.getElementById('binHeight').value) || 1;
-
-        // Validation: ensure values are positive
-        if (length < 1) document.getElementById('binLength').value = 1;
-        if (width < 1) document.getElementById('binWidth').value = 1;
-        if (height < 1) document.getElementById('binHeight').value = 1;
+        const length = parseInt(document.getElementById('binLength').value) || 10;
+        const width = parseInt(document.getElementById('binWidth').value) || 10;
+        const height = parseInt(document.getElementById('binHeight').value) || 10;
 
         this.binSize = {
-            length: Math.max(1, length),
-            width: Math.max(1, width),
-            height: Math.max(1, height)
+            length: length,
+            width: width,
+            height: height
         };
     }
 
@@ -177,14 +142,9 @@ class BinPackingVisualizer {
         const numberAxis = parseInt(document.getElementById('itemNumberAxis').value);
         const quantity = parseInt(document.getElementById('itemQuantity').value);
 
-        // Validation
+        // Basic validation - only check if fields are filled
         if (!length || !width || !height || !id || !quantity) {
             this.showToast('Please fill in all item fields', 'danger');
-            return;
-        }
-
-        if (length < 1 || width < 1 || height < 1 || id < 1 || quantity < 1) {
-            this.showToast('All dimensions, ID and quantity must be positive numbers', 'danger');
             return;
         }
 
@@ -511,7 +471,7 @@ class BinPackingVisualizer {
 
             // Generate algorithm steps from packed_items with pack_order
             const generatedSteps = this.generateStepsFromPackedItems(packedItems);
-            
+
             // Set packed results to enable full interface like packing algorithm
             this.packedResults = {
                 packed_items: packedItems,
@@ -544,7 +504,7 @@ class BinPackingVisualizer {
                     this.showToast(`Visualized ${packedItems.length} packed items from result file`, 'success');
                 } catch (error) {
                     console.error('Visualization error:', error);
-                    this.showToast('Error rendering visualization. Please try again.', 'danger');
+                    this.showToast(`Visualization error: ${error.message || 'Please try again.'}`, 'danger');
                 }
             }, 10);
 
@@ -923,13 +883,6 @@ class BinPackingVisualizer {
             console.error('Plot update error:', error);
             this.showToast('Visualization update failed.', 'warning');
         }
-
-        // Add click event for item details
-        document.getElementById('plot3d').on('plotly_click', (eventData) => {
-            if (eventData.points[0] && eventData.points[0].customdata) {
-                this.showItemDetails(eventData.points[0].customdata);
-            }
-        });
     }
 
     // Algorithm Endpoint Configuration Functions
@@ -946,7 +899,7 @@ class BinPackingVisualizer {
         // Show loading state
         checkBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         checkBtn.disabled = true;
-        statusDiv.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Đang kiểm tra...</div>';
+        const loadingToastId = this.showPersistentToast('Checking endpoint...'); // Show persistent loading toast
 
         try {
             const response = await fetch('/check_endpoint', {
@@ -971,17 +924,68 @@ class BinPackingVisualizer {
 
         } catch (error) {
             console.error('Check endpoint error:', error);
-            this.showEndpointStatus('error', 'Lỗi kết nối khi kiểm tra endpoint');
+            this.showTrainingEndpointStatus('error', 'Lỗi kết nối khi kiểm tra endpoint'); // Use training status div for consistency in error
             this.showToast('Lỗi kết nối khi kiểm tra endpoint', 'danger');
         } finally {
             // Restore button state
             checkBtn.innerHTML = '<i class="fas fa-check-circle"></i>';
             checkBtn.disabled = false;
+            // Hide loading notification
+            this.hidePersistentToast(loadingToastId);
         }
     }
 
     showEndpointStatus(type, message, info = null) {
         const statusDiv = document.getElementById('endpointStatus');
+        let iconClass, bgClass, textClass;
+
+        switch (type) {
+            case 'success':
+                iconClass = 'fas fa-check-circle';
+                bgClass = 'bg-success';
+                textClass = 'text-success';
+                break;
+            case 'error':
+                iconClass = 'fas fa-exclamation-triangle';
+                bgClass = 'bg-danger';
+                textClass = 'text-danger';
+                break;
+            case 'warning':
+                iconClass = 'fas fa-exclamation-circle';
+                bgClass = 'bg-warning';
+                textClass = 'text-warning';
+                break;
+            default:
+                iconClass = 'fas fa-info-circle';
+                bgClass = 'bg-info';
+                textClass = 'text-info';
+        }
+
+        let html = `
+            <div class="alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'warning'} alert-dismissible fade show p-2 mt-2" role="alert">
+                <i class="${iconClass} me-1"></i>
+                <small>${message}</small>
+        `;
+
+        if (info) {
+            html += `
+                <br><small class="text-muted">
+                    Service: ${info.service || 'Unknown'} |
+                    Version: ${info.version || 'Unknown'}
+                </small>
+            `;
+        }
+
+        html += `
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+
+        statusDiv.innerHTML = html;
+    }
+
+    showTrainingEndpointStatus(type, message, info = null) {
+        const statusDiv = document.getElementById('trainingEndpointStatus');
         let iconClass, bgClass, textClass;
 
         switch (type) {
@@ -1123,7 +1127,7 @@ class BinPackingVisualizer {
                     console.log('All processing completed.');
                 } catch (error) {
                     console.error('Visualization error:', error);
-                    this.showToast('Error rendering visualization. Please try again.', 'danger');
+                    this.showToast(`Visualization error: ${error.message || 'Please try again.'}`, 'danger');
                 }
             }, 10);
 
@@ -1530,6 +1534,7 @@ class BinPackingVisualizer {
         this.weights = {}; // Reset weights
         this.currentWeights = {}; // Reset editable weights
         this.currentWeightConfig = {}; // Reset weight config
+        this.loadedTrainingData = null; // Reset loaded training data
         this.pauseAnimation();
 
         // Reset form values
@@ -1651,6 +1656,48 @@ class BinPackingVisualizer {
         // Return toast ID for manual hiding if needed
         return toastId;
     }
+
+    // Creates a persistent toast that won't auto-hide.
+    // Returns the ID of the toast element, which can be used to hide it later.
+    showPersistentToast(message) {
+        let toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toastContainer';
+            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+            toastContainer.style.zIndex = '9999';
+            document.body.appendChild(toastContainer);
+        }
+
+        const toastId = 'persistent_toast_' + Date.now();
+        const toastHtml = `
+            <div id="${toastId}" class="toast align-items-center text-white bg-primary border-0 show" role="alert" aria-live="polite">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <div class="spinner-border spinner-border-sm me-2" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        ${message}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+        return toastId; // Return the ID so it can be hidden
+    }
+
+    // Hides a persistent toast given its ID.
+    hidePersistentToast(toastId) {
+        const toastElement = document.getElementById(toastId);
+        if (toastElement) {
+            const toast = bootstrap.Toast.getOrCreateInstance(toastElement);
+            toast.hide();
+            // Optionally remove the element after hiding
+            // toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
+        }
+    }
+
 
     getToastIcon(type) {
         const icons = {
@@ -1961,22 +2008,27 @@ class BinPackingVisualizer {
         // Store current weights for editing
         this.currentWeights = { ...weights };
 
-        // Initialize weight config (all weights enabled by default)
-        this.currentWeightConfig = {};
-        Object.keys(weights).forEach(key => {
-            this.currentWeightConfig[key] = true;
-        });
+        // Initialize weight config (all weights enabled by default if not already set)
+        if (!this.currentWeightConfig || Object.keys(this.currentWeightConfig).length === 0) {
+            this.currentWeightConfig = {};
+            Object.keys(weights).forEach(key => {
+                this.currentWeightConfig[key] = true;
+            });
+        }
 
         const weightsHtml = Object.entries(weights).map(([key, value]) => {
             const keyDisplay = key.replace('W_', '').replace(/_/g, ' ').toUpperCase();
             // Round to 2 decimal places for display
             const displayValue = Math.round(value * 100) / 100;
+            // Check if this weight is enabled in current config
+            const isEnabled = this.currentWeightConfig[key] !== false; // Default to true if not set
+
             return `
                 <div class="row mb-2 align-items-center">
                     <div class="col-1">
                         <div class="form-check">
                             <input class="form-check-input weight-checkbox" type="checkbox"
-                                   data-weight-key="${key}" checked>
+                                   data-weight-key="${key}" ${isEnabled ? 'checked' : ''}>
                         </div>
                     </div>
                     <div class="col-5">
@@ -2037,6 +2089,9 @@ class BinPackingVisualizer {
             this.currentWeightConfig = {};
         }
         this.currentWeightConfig[key] = isEnabled;
+
+        // Note: Checkbox now only controls weight_config in training API call
+        // Input fields remain always editable
     }
 
     getCurrentWeights() {
@@ -2087,9 +2142,47 @@ class BinPackingVisualizer {
         return weights;
     }
 
-    async runTraining() {
+    async loadTrainingFile() {
         const fileInput = document.getElementById('trainingFile');
         const file = fileInput.files[0];
+
+        if (!file) {
+            this.showToast('Please select a training file first', 'warning');
+            return;
+        }
+
+        try {
+            const text = await file.text();
+            const fileData = JSON.parse(text);
+
+            console.log('Loading training file:', fileData);
+
+            // Load weights if available
+            if (fileData.weights) {
+                this.weights = fileData.weights;
+                this.currentWeights = { ...fileData.weights };
+                this.showWeights(this.currentWeights);
+                console.log('Loaded weights from training file:', fileData.weights);
+            }
+
+            // Load training configuration if available
+            if (fileData.training_config) {
+                this.updateTrainingConfigUI(fileData.training_config);
+                console.log('Loaded training config from file:', fileData.training_config);
+            }
+
+            // Store training data for use in training
+            this.loadedTrainingData = fileData;
+
+            this.showToast('Training file loaded successfully! Weights and configuration updated.', 'success');
+
+        } catch (error) {
+            console.error('Error loading training file:', error);
+            this.showToast(`Failed to load training file: ${error.message}`, 'danger');
+        }
+    }
+
+    async runTraining() {
         const endpoint = document.getElementById('trainingEndpoint').value.trim();
 
         if (!endpoint) {
@@ -2097,42 +2190,18 @@ class BinPackingVisualizer {
             return;
         }
 
+        // Show persistent loading toast
+        const loadingToastId = this.showPersistentToast('Training algorithm... Please wait for response.');
+
         try {
             let trainingData = {};
 
-            if (file) {
-                // Case 1: File uploaded - parse and validate
-                const text = await file.text();
-                const fileData = JSON.parse(text);
-
-                if (fileData.training_data && Array.isArray(fileData.training_data)) {
-                    // Complete training example format like training_example.json
-                    trainingData = fileData;
-                    
-                    // Update UI with training_config from file
-                    if (fileData.training_config) {
-                        this.updateTrainingConfigUI(fileData.training_config);
-                    }
-                } else if (fileData.bin_size) {
-                    // File has bin_size but not complete training structure
-                    trainingData = {
-                        bin_size: fileData.bin_size,
-                        training_data: fileData.training_data || [],
-                        weights: fileData.weights || this.getDefaultWeights(),
-                        training_config: fileData.training_config || this.getDefaultTrainingConfig()
-                    };
-                    
-                    // Update UI with training_config from file
-                    if (fileData.training_config) {
-                        this.updateTrainingConfigUI(fileData.training_config);
-                    }
-                } else {
-                    this.showToast('Invalid training file format. File must contain bin_size or complete training structure.', 'danger');
-                    return;
-                }
+            if (this.loadedTrainingData) {
+                // Case 1: Training data loaded from file
+                trainingData = { ...this.loadedTrainingData };
+                console.log('Using loaded training data from file');
             } else {
-                // Case 2: No file - use bin_size from interface with minimum required structure
-                // Ensure we use current bin_size from interface
+                // Case 2: No file loaded - use bin_size from interface
                 this.updateBinSize(); // Make sure bin size is current
 
                 trainingData = {
@@ -2143,29 +2212,23 @@ class BinPackingVisualizer {
                     }
                 };
 
-                // Add weights if available
-                const currentWeights = this.getCurrentWeights();
-                if (currentWeights && Object.keys(currentWeights).length > 0) {
-                    trainingData.weights = currentWeights;
-                }
-
                 console.log('Training without file - using bin_size from interface:', trainingData);
             }
 
-            // Add training_config with weight_config from UI
-            if (!trainingData.training_config) {
-                trainingData.training_config = this.getDefaultTrainingConfig();
+            // Always get current weights from UI
+            const currentWeights = this.getCurrentWeights();
+            if (currentWeights && Object.keys(currentWeights).length > 0) {
+                trainingData.weights = currentWeights;
+                console.log('Using current weights from UI:', currentWeights);
             }
+
+            // Add training_config from UI values
+            trainingData.training_config = this.getTrainingConfigFromUI();
 
             // Add weight_config from current UI state
             if (this.currentWeightConfig && Object.keys(this.currentWeightConfig).length > 0) {
                 trainingData.training_config.weight_config = { ...this.currentWeightConfig };
                 console.log('Adding weight_config to training request:', this.currentWeightConfig);
-            }
-
-            // Update UI training config values if available in training data
-            if (trainingData.training_config) {
-                this.updateTrainingConfigUI(trainingData.training_config);
             }
 
             // Add supplementary data if available
@@ -2175,8 +2238,6 @@ class BinPackingVisualizer {
                 trainingData.training_data.push(...this.supplementaryFilesData);
                 console.log(`Added ${this.supplementaryFilesData.length} supplementary training data entries.`);
             }
-
-            this.showProcessingToast('Starting algorithm training...');
 
             const response = await fetch(endpoint, {
                 method: 'POST',
@@ -2224,6 +2285,9 @@ class BinPackingVisualizer {
         } catch (error) {
             console.error('Training error:', error);
             this.showToast(`Training failed: ${error.message}`, 'danger');
+        } finally {
+            // Hide loading notification
+            this.hidePersistentToast(loadingToastId);
         }
     }
 
@@ -2265,32 +2329,80 @@ class BinPackingVisualizer {
         };
     }
 
-    async checkTrainingEndpoint() {
-        const endpoint = document.getElementById('trainingEndpoint').value;
-        const statusDiv = document.getElementById('trainingEndpointStatus');
+    getTrainingConfigFromUI() {
+        // Get current values from UI inputs
+        const numSteps = parseInt(document.getElementById('numSteps')?.value) || 10;
+        const maxChange = parseFloat(document.getElementById('maxChange')?.value) || 0.1;
+        const numFakeDataSamples = parseInt(document.getElementById('numFakeDataSamples')?.value) || 5;
 
-        if (!endpoint) {
-            statusDiv.innerHTML = '<small class="text-warning">Please enter endpoint URL</small>';
+        // Get current weight config from checkboxes
+        const weightConfig = {};
+        const checkboxes = document.querySelectorAll('.weight-checkbox');
+        checkboxes.forEach(checkbox => {
+            const weightKey = checkbox.dataset.weightKey;
+            weightConfig[weightKey] = checkbox.checked;
+        });
+
+        // Update current weight config
+        this.currentWeightConfig = weightConfig;
+
+        return {
+            "num_steps": numSteps,
+            "max_change": maxChange,
+            "num_fake_data_samples": numFakeDataSamples,
+            "weight_config": weightConfig
+        };
+    }
+
+    async checkTrainingEndpoint() {
+        const endpointUrl = document.getElementById('trainingEndpoint').value.trim();
+        const statusDiv = document.getElementById('trainingEndpointStatus');
+        const checkBtn = document.getElementById('checkTrainingEndpoint');
+
+        if (!endpointUrl) {
+            this.showTrainingEndpointStatus('error', 'Vui lòng nhập endpoint URL');
             return;
         }
 
-        try {
-            statusDiv.innerHTML = '<small class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Checking...</small>';
+        // Show loading state
+        checkBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        checkBtn.disabled = true;
+        const loadingToastId = this.showPersistentToast('Checking training endpoint...'); // Show persistent loading toast
 
-            const response = await fetch(endpoint, {
-                method: 'GET',
+        try {
+            // Append /health to the endpoint URL like packing algorithm endpoint
+            const healthEndpoint = endpointUrl.endsWith('/') ? endpointUrl + 'health' : endpointUrl + '/health';
+
+            const response = await fetch('/check_endpoint', {
+                method: 'POST',
                 headers: {
-                    'Accept': 'application/json',
-                }
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    endpoint_url: healthEndpoint
+                })
             });
 
-            if (response.ok) {
-                statusDiv.innerHTML = '<small class="text-success"><i class="fas fa-check-circle me-1"></i>Training endpoint is accessible</small>';
+            const result = await response.json();
+
+            if (result.success) {
+                this.showTrainingEndpointStatus('success', result.message, result.endpoint_info);
+                this.showToast('Training endpoint hoạt động bình thường!', 'success');
             } else {
-                statusDiv.innerHTML = '<small class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>Endpoint responded but may not be ready</small>';
+                this.showTrainingEndpointStatus('error', result.message);
+                this.showToast(`Training endpoint error: ${result.message}`, 'danger');
             }
+
         } catch (error) {
-            statusDiv.innerHTML = '<small class="text-danger"><i class="fas fa-times-circle me-1"></i>Cannot reach training endpoint</small>';
+            console.error('Check training endpoint error:', error);
+            this.showTrainingEndpointStatus('error', 'Lỗi kết nối khi kiểm tra endpoint');
+            this.showToast('Lỗi kết nối khi kiểm tra training endpoint', 'danger');
+        } finally {
+            // Restore button state
+            checkBtn.innerHTML = '<i class="fas fa-check-circle"></i>';
+            checkBtn.disabled = false;
+            // Hide loading notification
+            this.hidePersistentToast(loadingToastId);
         }
     }
 
@@ -2353,6 +2465,7 @@ class BinPackingVisualizer {
     "W_packable_l": 1.0,
     "W_packable_w": 1.0,
     "W_max_l": 1000.0,
+    "W_max_w": 1000.0,
     "W_size_score": 3.299999952316284
   },
   "training_config": {
@@ -2579,7 +2692,7 @@ class BinPackingVisualizer {
     // Update training configuration UI from loaded file data
     updateTrainingConfigUI(trainingConfig) {
         console.log('Updating training config UI with:', trainingConfig);
-        
+
         // Update num_steps
         if (trainingConfig.num_steps !== undefined) {
             const numStepsInput = document.getElementById('numSteps');
@@ -2624,6 +2737,8 @@ class BinPackingVisualizer {
             const weightKey = checkbox.dataset.weightKey;
             if (weightConfig.hasOwnProperty(weightKey)) {
                 checkbox.checked = weightConfig[weightKey];
+                // Update the corresponding input field's state
+                this.onWeightConfigChange(weightKey, weightConfig[weightKey]);
                 console.log(`Updated weight checkbox ${weightKey} to: ${weightConfig[weightKey]}`);
             }
         });
@@ -2637,7 +2752,7 @@ class BinPackingVisualizer {
 
         // Sort items by pack_order
         const sortedItems = [...packedItems].sort((a, b) => (a.pack_order || 0) - (b.pack_order || 0));
-        
+
         // Generate steps for each packed item
         const steps = sortedItems.map((item, index) => {
             return {

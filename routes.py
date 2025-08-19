@@ -731,14 +731,30 @@ def validate_json():
         # Support both old format (length, width, height) and new format (L, W, H)
         if 'L' in bin_size and 'W' in bin_size and 'H' in bin_size:
             # New format with L, W, H
-            bin_size_normalized = {
-                'length': bin_size['L'],
-                'width': bin_size['W'],
-                'height': bin_size['H']
-            }
+            try:
+                bin_size_normalized = {
+                    'length': float(bin_size['L']),
+                    'width': float(bin_size['W']),
+                    'height': float(bin_size['H'])
+                }
+            except (ValueError, TypeError):
+                return jsonify({
+                    'success': False,
+                    'message': 'bin_size L, W, H must be valid numbers'
+                }), 400
         elif 'length' in bin_size and 'width' in bin_size and 'height' in bin_size:
             # Old format
-            bin_size_normalized = bin_size
+            try:
+                bin_size_normalized = {
+                    'length': float(bin_size['length']),
+                    'width': float(bin_size['width']),
+                    'height': float(bin_size['height'])
+                }
+            except (ValueError, TypeError):
+                return jsonify({
+                    'success': False,
+                    'message': 'bin_size length, width, height must be valid numbers'
+                }), 400
         else:
             return jsonify({
                 'success': False,

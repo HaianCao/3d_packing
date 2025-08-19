@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Plotly.js -->
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -197,6 +197,12 @@
                                     <div class="mb-3">
                                         <label class="form-label fw-bold">Training Data File</label>
                                         <input type="file" class="form-control" id="trainingFile" accept=".json">
+                                        <div class="d-grid gap-2 mt-2">
+                                            <button class="btn btn-outline-warning" id="loadTrainingFile">
+                                                <i class="fas fa-file-import me-2"></i>
+                                                Load Training File
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label fw-bold">Supplementary Data Files</label>
@@ -246,7 +252,7 @@
                                     </h6>
                                     <div class="text-muted mb-3">
                                         <small><i class="fas fa-info-circle me-1"></i>
-                                        These parameters are automatically updated from training or JSON import</small>
+                                        Use checkboxes to select which weights to include in training. All values remain editable.</small>
                                     </div>
                                     <div id="weightsDisplay">
                                         <div class="text-center text-muted">
